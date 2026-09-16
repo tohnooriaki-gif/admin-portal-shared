@@ -8,7 +8,8 @@
     "./session": "./src/session.ts",
     "./sessionHeaders": "./src/sessionHeaders.ts",
     "./basePath": "./src/basePath.ts",
-    "./loginRedirect": "./src/loginRedirect.ts"
+    "./loginRedirect": "./src/loginRedirect.ts",
+    "./middlewareMatcher": "./src/middlewareMatcher.ts"
   },
   "peerDependencies": {
     "jose": "^5.0.0"
