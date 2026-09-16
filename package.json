@@ -1,0 +1,21 @@
+{
+  "name": "admin-portal-shared",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "description": "admin-portal（Multi-Zone shell）配下の各アプリ（price-app / receipt-app / 今後追加分）が共有する認証まわりのユーティリティ",
+  "exports": {
+    "./session": "./src/session.ts",
+    "./sessionHeaders": "./src/sessionHeaders.ts",
+    "./basePath": "./src/basePath.ts",
+    "./loginRedirect": "./src/loginRedirect.ts"
+  },
+  "peerDependencies": {
+    "jose": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "jose": "^5.10.0",
+    "typescript": "^5.9.3"
+  }
+}
