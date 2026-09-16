@@ -6,6 +6,8 @@ admin-portal（Multi-Zone shell）配下の各アプリ（shell 本体 / price-a
 ビルドはしない。TypeScript のソースをそのまま各アプリの `node_modules` に git 依存として取り込み、
 Next.js の `transpilePackages` でトランスパイルしてもらう方式（社内向け・非公開のため npm 公開はしない）。
 
+統合ポータル配下の全セッション共通の作業ルールは [`WORKFLOW.md`](./WORKFLOW.md) 参照。
+
 ## 何が入っているか（＝各アプリで実装が完全に一致すべき部分だけ）
 
 - `session`: `portal_session` JWT の検証（`verifySession`）・発行（`signSession`、shell専用）。`jose`/HS256。
