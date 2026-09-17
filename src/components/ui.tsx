@@ -74,6 +74,16 @@ const ACCENT_CLASSES: Record<Accent, { button: string; buttonHover: string; focu
  * 新しいアクセントカラーが必要になったら ACCENT_CLASSES に追加すること
  * （動的な `bg-${accent}-600` のようなクラス名生成はTailwindの静的解析に認識されず
  * クラスが生成されないため使えない）。
+ *
+ * **重要**: `createUiKit()`はコンポーネントではなく、モジュール読み込み時に実行される
+ * 普通の関数。このファイルは`"use client"`だが、呼び出し側（アプリの`components/ui.tsx`
+ * 等）に`"use client"`が無いと、そのファイルはサーバーモジュール扱いになり、
+ * `next build`が「Attempted to call createUiKit() from the server but createUiKit
+ * is on the client」で失敗する（Server Componentからimportされて初めて顕在化するため
+ * dev中は気づかないことがある）。呼び出し側のファイルにも`"use client"`を付けること。
+ * アイコンをpropsで渡す等の理由でサーバーコンポーネントからも使いたいコンポーネントが
+ * 同じファイルに混在する場合は、`createUiKit()`を呼ぶ部分だけ別ファイルに分離する
+ * （price-appの`components/ui-shared.tsx`が実例）。
  */
 export function createUiKit(accent: Accent) {
   const c = ACCENT_CLASSES[accent];

@@ -40,6 +40,12 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
   receipt-app: emerald）だけが違ったため、`createUiKit(accent)`で生成する形にした
   （新しいアクセントカラーは`ui.tsx`内の`ACCENT_CLASSES`に追加すること。Tailwindは
   クラス名を静的に解析するため、`` `bg-${accent}-600` `` のような動的生成はできない）。
+  **注意**: `createUiKit()`はコンポーネントではなく普通の関数なので、呼び出す側の
+  ファイル（アプリの`components/ui.tsx`等）にも`"use client"`が必要（無いとサーバー
+  コンポーネント経由の`next build`で「Attempted to call createUiKit() from the
+  server」エラーになる）。アイコンをpropsで渡す等サーバーコンポーネントからも使いたい
+  ものが同じファイルに混在するなら、`createUiKit()`を呼ぶ部分だけ別ファイルに分離する
+  （price-appの`components/ui-shared.tsx`が実例）。
 
 **Tailwindを使うUI系モジュール（`components/UserMenu`・`components/ui`）の注意**:
 各アプリの`tailwind.config.js`の`content`に、このパッケージのソースを含めること
