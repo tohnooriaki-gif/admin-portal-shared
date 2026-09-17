@@ -49,6 +49,7 @@ admin-portal-shared（統合ポータル配下の各アプリが共有する認�
 - `supabase`（`createServiceClient(url, serviceRoleKey)`）を追加。price-app/receipt-appの`lib/supabase.ts`がコメント文言まで完全一致していたため、サーバー専用Supabaseクライアント生成をファクトリ関数として共通化
 - `components/UserMenu`（本パッケージ初のReact/JSXコンポーネント）を追加。ヘッダーのユーザーメニュー（`{portalUrl, userName}`）が両アプリで実装完全一致だったため共通化。`react`/`lucide-react`をpeerDependenciesに追加、tsconfigに`jsx`設定を追加
 - タグ`v3`発行（`684c8af`）
+- `db`（`unwrap<T>`）・`format`（`formatDate`/`formatDateTime`）・`components/ui`（`Card`/`SecondaryButton`/`Field`/`createUiKit(accent)`）を追加。admin-portalセッションの棚卸し経由の提案を検証し反映（タグ`v3.2`、`7a6878c`）。バッジ類・`StatCard`/`StatTile`・`lib/search.ts`・`ActionHistoryEntry`型は実装差分があるため対象外と判断
 
 ### 🔄 変更
 - `admin-portal-shared`の目的を「認証まわりのユーティリティ」から「処理全般のユーティリティ（認証はその一部）」に拡張（ユーザー確認済み）。README/package.jsonのdescriptionを更新
