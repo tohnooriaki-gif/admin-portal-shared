@@ -43,7 +43,16 @@ admin-portal-shared（統合ポータル配下の各アプリが共有する認�
 
 ## 📅 2026-09-17（木）
 
-**概要：price-app/receipt-appの移行作業で見つかった3件をドキュメントへ反映**
+**概要：price-app/receipt-appの移行作業で見つかった3件をドキュメントへ反映、目的を処理全般の共通化に拡張**
+
+### 🆕 追加
+- `supabase`（`createServiceClient(url, serviceRoleKey)`）を追加。price-app/receipt-appの`lib/supabase.ts`がコメント文言まで完全一致していたため、サーバー専用Supabaseクライアント生成をファクトリ関数として共通化
+- `components/UserMenu`（本パッケージ初のReact/JSXコンポーネント）を追加。ヘッダーのユーザーメニュー（`{portalUrl, userName}`）が両アプリで実装完全一致だったため共通化。`react`/`lucide-react`をpeerDependenciesに追加、tsconfigに`jsx`設定を追加
+- タグ`v3`発行（`684c8af`）
+
+### 🔄 変更
+- `admin-portal-shared`の目的を「認証まわりのユーティリティ」から「処理全般のユーティリティ（認証はその一部）」に拡張（ユーザー確認済み）。README/package.jsonのdescriptionを更新
+- README「含めていないもの」を整理: `AppShell`のナビ構成は引き続き対象外だが、ヘッダーの`UserMenu`部分だけは共通化。`next.config.js`のwebpack externals(3件目の提案)は、`next.config.js`がNext.jsのトランスパイル前にプレーンなNode.jsとして実行されるためTypeScriptソース配布の現行方式では共通化できないと判断し見送り
 
 ### 🐛 修正
 - README使用例の`matcher: AUTH_AWARE_MATCHER`をリテラル`["/:path*"]`に修正し、Next.jsが`config.matcher`をビルド時に静的解析するため定数importをそのまま渡すと認識されない（警告のみで黙ってデフォルト設定にフォールバックする）という注意をREADME/`middlewareMatcher.ts`のJSDocに追加。price-app・receipt-app双方がこれを実際に踏んでいたことを確認（price-app commit `ac76f3b`、receipt-app commit `ef2ef3f`）
