@@ -31,13 +31,29 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
   に渡すワークアラウンド（Node18未満でグローバルWebSocketが無い問題への対処）を含む。
 - `components/UserMenu`: ヘッダー右上のユーザーメニュー（`{ portalUrl, userName }`を受け取る）。
   「アプリ一覧へ戻る」「ログアウト」のドロップダウン。price-app/receipt-app双方で実装が完全に
-  一致していたため共通化（v3〜）。Tailwind CSSのクラス名（slate系パレット等）をそのまま
-  使っているため、導入するアプリのTailwind設定がこの配色を解決できることが前提。
+  一致していたため共通化（v3〜）。
+- `db`: `unwrap<T>({ data, error })`。Supabaseレスポンスからdataを取り出し、errorがあれば例外にする。
+- `format`: `formatDate` / `formatDateTime`。`formatYen`はアプリごとに挙動が違う
+  （receipt-appはマイナス値対応）ため対象外。
+- `components/ui`: UI基本部品。`Card` / `SecondaryButton` / `Field`はそのままexport。
+  `PrimaryButton` / `inputClass` / `selectClass`はアクセントカラー（price-app: indigo、
+  receipt-app: emerald）だけが違ったため、`createUiKit(accent)`で生成する形にした
+  （新しいアクセントカラーは`ui.tsx`内の`ACCENT_CLASSES`に追加すること。Tailwindは
+  クラス名を静的に解析するため、`` `bg-${accent}-600` `` のような動的生成はできない）。
+
+**Tailwindを使うUI系モジュール（`components/UserMenu`・`components/ui`）の注意**:
+各アプリの`tailwind.config.js`の`content`に、このパッケージのソースを含めること
+（例: `"./node_modules/admin-portal-shared/src/**/*.{ts,tsx}"`）。含めないと、アプリ側の
+コードに同じクラス名が偶然残っていない限りTailwindがこれらのクラスを生成せず、見た目が
+崩れる（ビルドエラーにはならないため気づきにくい）。
 
 **含めていないもの**（アプリごとに正当な理由で異なるため、あえて共通化しない）:
 - 権限・role の解決方法（price-appはDBの`users`/`role_permissions`を引く。receipt-appは当面なし）
 - `AppShell`のナビ構成そのもの（メニュー項目・アイコン・権限表示の有無がアプリごとに違う。
   ヘッダーの`UserMenu`部分だけは実装が完全に一致していたため`components/UserMenu`で共通化）
+- バッジ類（`KindBadge`/`SourceBadge`等）・`StatCard`/`StatTile`（price-appは`delta`前月比表示が
+  あり微妙に差分がある）・`lib/search.ts`の検索ロジック・`ActionHistoryEntry`型（見た目は似て
+  いても実装・フィールドがアプリごとに異なる）
 - middleware本体・matcherの除外パス方針そのもの（`/api/`除外要否などアプリ固有の判断がある部分。
   matcherの形＋静的アセット除外の判定だけは`middlewareMatcher`で共通化）
 - `next.config.js`のwebpack設定（`ws`の未使用ネイティブ依存の除外など）。`next.config.js`は

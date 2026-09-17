@@ -11,7 +11,10 @@
     "./loginRedirect": "./src/loginRedirect.ts",
     "./middlewareMatcher": "./src/middlewareMatcher.ts",
     "./supabase": "./src/supabase.ts",
-    "./components/UserMenu": "./src/components/UserMenu.tsx"
+    "./components/UserMenu": "./src/components/UserMenu.tsx",
+    "./db": "./src/db.ts",
+    "./format": "./src/format.ts",
+    "./components/ui": "./src/components/ui.tsx"
   },
   "peerDependencies": {
     "jose": "^5.0.0",
