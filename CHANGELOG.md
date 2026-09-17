@@ -8,6 +8,7 @@ admin-portal-shared（統合ポータル配下の各アプリが共有する認�
 
 **目次**
 - [📅 2026-09-16（水）](#2026-09-16水)
+- [📅 2026-09-17（木）](#2026-09-17木)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -37,3 +38,15 @@ admin-portal-shared（統合ポータル配下の各アプリが共有する認�
 
 ### 📝 その他
 （なし）
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 📅 2026-09-17（木）
+
+**概要：price-app/receipt-appの移行作業で見つかった3件をドキュメントへ反映**
+
+### 🐛 修正
+- README使用例の`matcher: AUTH_AWARE_MATCHER`をリテラル`["/:path*"]`に修正し、Next.jsが`config.matcher`をビルド時に静的解析するため定数importをそのまま渡すと認識されない（警告のみで黙ってデフォルト設定にフォールバックする）という注意をREADME/`middlewareMatcher.ts`のJSDocに追加。price-app・receipt-app双方がこれを実際に踏んでいたことを確認（price-app commit `ac76f3b`、receipt-app commit `ef2ef3f`）
+- `basePath`の二重付与防止ガードが、アプリ内部ルートのトップレベルセグメント名がbasePath値と偶然一致する場合に誤判定する既知の制約をREADME/`basePath.ts`のJSDocに明記（price-appはこの理由で不採用というのを確認）
+- README依存指定の例を`git+https://...#v2`（タグ固定）に修正し、`npm install <pkg>@<spec>`単体指定コマンドが`package.json`の表記を`git+ssh://`形式へ自動で書き換えてしまう（SSH鍵の無いビルド環境で失敗しうる）注意を追加
+- タグ`v2.1`発行（`24b7628`）。コード挙動の変更はなし（ドキュメント/JSDocのみ）
