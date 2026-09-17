@@ -1,7 +1,8 @@
 # admin-portal-shared
 
 admin-portal（Multi-Zone shell）配下の各アプリ（shell 本体 / price-app / receipt-app / 今後追加分）が
-共有する認証まわりのユーティリティ。契約の詳細は `admin-portal` リポジトリの `docs/auth-contract.md` を参照。
+共有する処理全般のユーティリティ。認証まわりはその一部（詳細は `admin-portal` リポジトリの
+`docs/auth-contract.md` を参照）で、各アプリで実装が完全に一致すべき処理であれば認証以外も対象。
 
 ビルドはしない。TypeScript のソースをそのまま各アプリの `node_modules` に git 依存として取り込み、
 Next.js の `transpilePackages` でトランスパイルしてもらう方式（社内向け・非公開のため npm 公開はしない）。
@@ -25,18 +26,30 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
   （negative lookahead併用）がbasePathルート直下を素通りさせる不具合が price-app / receipt-app
   双方で見つかったため導入（v2〜）。`/api/`除外などアプリ固有の判断はここに含めない。
 
+- `supabase`: `createServiceClient(url, serviceRoleKey)`。サーバー専用Supabaseクライアント
+  （service_role key。RLSバイパスにつき絶対にブラウザへ渡さないこと）。`ws`をrealtime transport
+  に渡すワークアラウンド（Node18未満でグローバルWebSocketが無い問題への対処）を含む。
+- `components/UserMenu`: ヘッダー右上のユーザーメニュー（`{ portalUrl, userName }`を受け取る）。
+  「アプリ一覧へ戻る」「ログアウト」のドロップダウン。price-app/receipt-app双方で実装が完全に
+  一致していたため共通化（v3〜）。Tailwind CSSのクラス名（slate系パレット等）をそのまま
+  使っているため、導入するアプリのTailwind設定がこの配色を解決できることが前提。
+
 **含めていないもの**（アプリごとに正当な理由で異なるため、あえて共通化しない）:
 - 権限・role の解決方法（price-appはDBの`users`/`role_permissions`を引く。receipt-appは当面なし）
-- `AppShell`等のUIコンポーネント（ナビ構成・権限表示の有無がアプリごとに違う）
+- `AppShell`のナビ構成そのもの（メニュー項目・アイコン・権限表示の有無がアプリごとに違う。
+  ヘッダーの`UserMenu`部分だけは実装が完全に一致していたため`components/UserMenu`で共通化）
 - middleware本体・matcherの除外パス方針そのもの（`/api/`除外要否などアプリ固有の判断がある部分。
   matcherの形＋静的アセット除外の判定だけは`middlewareMatcher`で共通化）
+- `next.config.js`のwebpack設定（`ws`の未使用ネイティブ依存の除外など）。`next.config.js`は
+  Next.jsのトランスパイル前にプレーンなNode.jsとして実行されるため、TypeScriptソースのまま
+  配布する現状の方式ではこのパッケージから直接importできない（各アプリにコピーが必要）
 
 ## 使い方（各アプリ側）
 
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v2"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3"
 }
 ```
 
