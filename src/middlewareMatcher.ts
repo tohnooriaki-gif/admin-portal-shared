@@ -12,6 +12,13 @@
  *
  * `/api/` 配下の除外要否などアプリ固有の判断はここに含めない（各アプリの
  * middleware.ts 側で個別に判定する）。
+ *
+ * **重要**: Next.js は middleware の `config.matcher` をビルド時に静的解析するため、
+ * この定数を import してそのまま `config.matcher` に渡しても認識されず、警告だけを
+ * 出して「デフォルト設定」に黙ってフォールバックする（price-app / receipt-app 双方が
+ * 実際に踏んだ不具合。basePath直下の認証バイパス対策が無効化されたまま気づかず本番
+ * 稼働していたことがある）。`config.matcher` にはこの定数の中身をリテラルで書くこと
+ * （`admin-portal-shared` の README の使用例を参照）。
  */
 export const AUTH_AWARE_MATCHER = ["/:path*"];
 

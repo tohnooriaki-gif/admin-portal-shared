@@ -14,6 +14,11 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
 - `sessionHeaders`: middleware で検証したクレームをリクエストヘッダーに詰めて後続へ渡す共通の詰め方
   （DBに突き合わせず名前表示だけで足りるアプリ向け。price-appのように権限をDBで解決するアプリは対象外）。
 - `basePath`: `withBasePath()` パターン（アプリごとの basePath値は各アプリが持つ）。
+  **既知の制約**: アプリ内部のルートのトップレベルセグメント名が自分のbasePath値と
+  偶然一致する場合（例: basePath `/products` のアプリに `/products/{code}` という
+  内部ルートがある）、二重付与防止ガードが「もうbasePathが付いている」と誤判定し、
+  basePathが付かない。該当するアプリはこのモジュールを使わず独自実装で対応すること
+  （price-appはこの理由で不採用）。
 - `loginRedirect`: 未認証時の `${PORTAL_URL}/login?redirect=...` 組み立てと、ログアウト遷移先の組み立て。
 - `middlewareMatcher`: `AUTH_AWARE_MATCHER`（middlewareのmatcher設定）と `isStaticAssetPath()`
   （`_next/static`/`_next/image`/`favicon.ico` の除外判定）。basePath配下で絞り込みmatcher
@@ -31,9 +36,19 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "github:tohnooriaki-gif/admin-portal-shared#main"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v2"
 }
 ```
+
+**注意**:
+- `git+https://`＋タグ固定（`#v2`等）で書くこと。`github:...#main`のような短縮形式は
+  `package-lock.json`内で`git+ssh://`に正規化されることがあり、SSH鍵の無いビルド環境
+  （Vercel等）でインストールが失敗するリスクがある
+- `npm install admin-portal-shared@<何か>`のように、このパッケージ単体を指定する
+  `npm install`コマンドは使わないこと。バージョンを変更したいときは`package.json`を
+  直接編集してから、引数無しの`npm install`を実行する（単体指定のコマンドを一度でも
+  実行すると、`package.json`側の`git+https://`表記が`git+ssh://`の短縮形式に自動で
+  書き換わってしまうことを確認済み。手動で書き戻す必要がある）
 
 `next.config.js`:
 ```js
@@ -64,8 +79,13 @@ export async function middleware(req: NextRequest) {
   return NextResponse.redirect(buildLoginRedirectUrl(portalUrl, BASE_PATH, req.nextUrl.pathname, req.nextUrl.search));
 }
 
+// Next.js は middleware の config.matcher をビルド時に静的解析するため、import した
+// 定数をそのまま渡すと認識されず「デフォルト設定」に**警告だけで黙って**フォールバックする
+// （price-app / receipt-app 双方で実際に踏んだ不具合。basePath直下の認証バイパス対策が
+// 無効化されたまま気づかず本番稼働していたことがある）。値は必ずリテラルで書き、
+// AUTH_AWARE_MATCHER の中身と一致させること。
 export const config = {
-  matcher: AUTH_AWARE_MATCHER,
+  matcher: ["/:path*"],
 };
 ```
 
