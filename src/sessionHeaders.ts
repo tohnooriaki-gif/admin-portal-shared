@@ -14,19 +14,27 @@ const HEADER_ROLE = "x-portal-user-role";
 export function setSessionHeaders(headers: Headers, claims: SessionClaims): void {
   headers.set(HEADER_SUB, claims.sub);
   headers.set(HEADER_NAME, encodeURIComponent(claims.name));
-  headers.set(HEADER_ROLE, claims.role);
+  // role（「管理者」等）も日本語を含みうる。HTTPヘッダー値はByteString(Latin1)しか
+  // 許容せず、非ASCII文字を含むまま headers.set() に渡すと例外になるためエンコードする。
+  headers.set(HEADER_ROLE, encodeURIComponent(claims.role));
+}
+
+function decodeHeaderValue(raw: string | null): string {
+  if (!raw) return "";
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
 }
 
 /** API Route（NextRequestのheaders）・Server Component（next/headersのheaders()）どちらでも読める */
 export function getSessionFromHeaders(headers: { get(name: string): string | null }): SessionClaims | null {
   const sub = headers.get(HEADER_SUB);
   if (!sub) return null;
-  const rawName = headers.get(HEADER_NAME) ?? "";
-  let name = "";
-  try {
-    name = decodeURIComponent(rawName);
-  } catch {
-    name = rawName;
-  }
-  return { sub, name, role: headers.get(HEADER_ROLE) ?? "" };
+  return {
+    sub,
+    name: decodeHeaderValue(headers.get(HEADER_NAME)),
+    role: decodeHeaderValue(headers.get(HEADER_ROLE)),
+  };
 }
