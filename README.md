@@ -7,7 +7,9 @@ admin-portal（Multi-Zone shell）配下の各アプリ（shell 本体 / price-a
 ビルドはしない。TypeScript のソースをそのまま各アプリの `node_modules` に git 依存として取り込み、
 Next.js の `transpilePackages` でトランスパイルしてもらう方式（社内向け・非公開のため npm 公開はしない）。
 
-統合ポータル配下の全セッション共通の作業ルールは [`WORKFLOW.md`](./WORKFLOW.md) 参照。
+統合ポータル配下の全セッション共通の作業ルールは、統合ポータル全体管理セッションが管理する
+`D:\dev\admin-portal-management\WORKFLOW.md`（ローカルgitリポジトリ、2026-09-18〜）を参照。
+このリポジトリ内では管理しない（変更したい場合は統合ポータル全体管理セッションに依頼する）。
 
 ## 何が入っているか（＝各アプリで実装が完全に一致すべき部分だけ）
 
