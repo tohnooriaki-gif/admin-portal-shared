@@ -73,7 +73,7 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.2"
 }
 ```
 
@@ -128,5 +128,12 @@ export const config = {
 
 ## バージョン管理
 
-タグ運用（`v1`, `v2`, ...）。破壊的変更をするときはタグを切り、各アプリ側で明示的に上げる
-（`#main` 追従だと知らないうちに全アプリが同時に変わってしまうため、本運用では `#v1` のようにタグ固定を推奨）。
+タグ運用。`#main` 追従だと知らないうちに全アプリが同時に変わってしまうため、`#v1` のように
+タグ固定を推奨。各アプリ側でタグを明示的に上げることで追従する。
+
+- **破壊的変更**: メジャータグを切る（`v1` → `v2` → `v3`）
+- **非破壊的変更**（新規exportの追加・バグ修正・ドキュメント修正など）: マイナータグを切る
+  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2`）。既存のメジャータグは動かさない（他アプリが意図せず
+  巻き込まれないように）
+
+最新のタグは `git tag -l --sort=-creatordate` で確認するか、`CHANGELOG.md` を参照。
