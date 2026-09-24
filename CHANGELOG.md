@@ -98,3 +98,4 @@ admin-portal-shared（統合ポータル配下の各アプリが共有する処�
 
 ### 🔄 変更
 - **（タグ管理対象外）** README.mdの開発ルールへのポインタを`CLAUDE.md`に移動し、README.mdはリポジトリ自体の説明（何が入っているか・使い方等）に専念する形に整理（`8298dc8`）
+- **（タグ管理対象外）** `admin-portal-management`がGitHubにpush（Private）されたのを受け、`CLAUDE.md`の参照先をローカル絶対パスからGitHub URL主体に更新（`c48c902`）。他マシンでも参照可能に
