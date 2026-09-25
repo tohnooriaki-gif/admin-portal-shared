@@ -23,7 +23,7 @@ export function SecondaryButton({ children, ...props }: ButtonHTMLAttributes<HTM
   return (
     <button
       {...props}
-      className={`inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 ${
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 ${
         props.className ?? ""
       }`}
     >
@@ -68,8 +68,8 @@ const ACCENT_CLASSES: Record<Accent, { button: string; buttonHover: string; focu
 };
 
 /**
- * アクセントカラー依存のUI部品（`PrimaryButton`・`inputClass`・`selectClass`）をまとめて
- * 生成する。price-app(indigo)/receipt-app(emerald)で構造は完全に同一で、Tailwindの
+ * アクセントカラー依存のUI部品（`PrimaryButton`・`inputClass`・`selectClass`と、幅指定を
+ * 含まない変種の`inputClassBase`・`selectClassBase`）をまとめて生成する。price-app(indigo)/receipt-app(emerald)で構造は完全に同一で、Tailwindの
  * クラス名に直書きされたアクセントカラーだけが違ったため、ファクトリ関数として共通化した。
  * 新しいアクセントカラーが必要になったら ACCENT_CLASSES に追加すること
  * （動的な `bg-${accent}-600` のようなクラス名生成はTailwindの静的解析に認識されず
@@ -92,7 +92,7 @@ export function createUiKit(accent: Accent) {
     return (
       <button
         {...props}
-        className={`inline-flex items-center gap-1.5 rounded-lg ${c.button} px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-colors ${c.buttonHover} disabled:cursor-not-allowed disabled:opacity-50 ${
+        className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg ${c.button} px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-colors ${c.buttonHover} disabled:cursor-not-allowed disabled:opacity-50 ${
           props.className ?? ""
         }`}
       >
@@ -101,8 +101,13 @@ export function createUiKit(accent: Accent) {
     );
   }
 
-  const inputClass = `w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors placeholder:text-slate-400 ${c.focusBorder} focus:outline-none focus:ring-2 ${c.focusRing}`;
+  // 幅指定を含まない変種。幅を自前で指定したい場合（w-auto・w-28・flex-1 など）はこちらを使う。
+  // `${inputClass} w-auto` のように後ろに足しても、Tailwindは生成順で w-full が後勝ちするため
+  // 効かない（全幅のまま縦積みになる）。
+  const inputClassBase = `rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors placeholder:text-slate-400 ${c.focusBorder} focus:outline-none focus:ring-2 ${c.focusRing}`;
+  const selectClassBase = inputClassBase;
+  const inputClass = `w-full ${inputClassBase}`;
   const selectClass = inputClass;
 
-  return { PrimaryButton, inputClass, selectClass };
+  return { PrimaryButton, inputClass, selectClass, inputClassBase, selectClassBase };
 }

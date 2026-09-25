@@ -31,13 +31,20 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
   に渡すワークアラウンド（Node18未満でグローバルWebSocketが無い問題への対処）を含む。
 - `components/UserMenu`: ヘッダー右上のユーザーメニュー（`{ portalUrl, userName }`を受け取る）。
   「アプリ一覧へ戻る」「ログアウト」のドロップダウン。price-app/receipt-app双方で実装が完全に
-  一致していたため共通化（v3〜）。
+  一致していたため共通化（v3〜）。v3.3で長い名前・メールアドレスへの耐性を追加（名前は
+  `truncate`で省略表示、フルネームは`title`）、ドロップダウンはpillの高さに追従、外側クリック/
+  Escapeで閉じる方式を、ヘッダーの`backdrop-blur`でも効くよう`fixed`オーバーレイから
+  documentイベントに変更。
 - `db`: `unwrap<T>({ data, error })`。Supabaseレスポンスからdataを取り出し、errorがあれば例外にする。
 - `format`: `formatDate` / `formatDateTime`。`formatYen`はアプリごとに挙動が違う
   （receipt-appはマイナス値対応）ため対象外。
 - `components/ui`: UI基本部品。`Card` / `SecondaryButton` / `Field`はそのままexport。
-  `PrimaryButton` / `inputClass` / `selectClass`はアクセントカラー（price-app: indigo、
-  receipt-app: emerald）だけが違ったため、`createUiKit(accent)`で生成する形にした
+  `PrimaryButton` / `inputClass` / `selectClass`（と、幅指定を含まない変種の
+  `inputClassBase` / `selectClassBase`、v3.3〜）はアクセントカラー（price-app: indigo、
+  receipt-app: emerald）だけが違ったため、`createUiKit(accent)`で生成する形にした。
+  幅を自前で指定したい入力欄（`w-auto`・`w-28`・`flex-1`等）は`inputClassBase`を使うこと
+  （`${inputClass} w-auto`は、Tailwindの生成順で`w-full`が後勝ちして効かず全幅になる）。
+  ボタン類は`whitespace-nowrap`付き（v3.3〜）
   （新しいアクセントカラーは`ui.tsx`内の`ACCENT_CLASSES`に追加すること。Tailwindは
   クラス名を静的に解析するため、`` `bg-${accent}-600` `` のような動的生成はできない）。
   **注意**: `createUiKit()`はコンポーネントではなく普通の関数なので、呼び出す側の
@@ -71,7 +78,7 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.2"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.3"
 }
 ```
 
@@ -131,7 +138,7 @@ export const config = {
 
 - **破壊的変更**: メジャータグを切る（`v1` → `v2` → `v3`）
 - **非破壊的変更**（新規exportの追加・バグ修正・ドキュメント修正など）: マイナータグを切る
-  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2`）。既存のメジャータグは動かさない（他アプリが意図せず
+  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3`）。既存のメジャータグは動かさない（他アプリが意図せず
   巻き込まれないように）
 
 最新のタグは `git tag -l --sort=-creatordate` で確認するか、`CHANGELOG.md` を参照。
