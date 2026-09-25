@@ -35,6 +35,11 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
   `truncate`で省略表示、フルネームは`title`）、ドロップダウンはpillの高さに追従、外側クリック/
   Escapeで閉じる方式を、ヘッダーの`backdrop-blur`でも効くよう`fixed`オーバーレイから
   documentイベントに変更。
+  **狭い画面（320px級）でヘッダーからはみ出させないための注意（v3.4〜）**: このコンポーネントを
+  包む要素（例: `<div className="ml-auto">`）に`min-w-0`を付けること。flex項目は既定で内容の
+  最小幅より縮まないため、包む要素が縮められないと、ボタンは内容幅（約162px）のままはみ出す
+  （ボタン側は`max-w-full min-w-0`で縮められる作りにしてあり、名前が省略表示される）。
+  ヘッダーの他の要素（タイトル等）を縮めない構成にする場合に特に必要。
 - `db`: `unwrap<T>({ data, error })`。Supabaseレスポンスからdataを取り出し、errorがあれば例外にする。
 - `format`: `formatDate` / `formatDateTime`。`formatYen`はアプリごとに挙動が違う
   （receipt-appはマイナス値対応）ため対象外。
@@ -78,7 +83,7 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.3"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.4"
 }
 ```
 
@@ -138,7 +143,7 @@ export const config = {
 
 - **破壊的変更**: メジャータグを切る（`v1` → `v2` → `v3`）
 - **非破壊的変更**（新規exportの追加・バグ修正・ドキュメント修正など）: マイナータグを切る
-  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3`）。既存のメジャータグは動かさない（他アプリが意図せず
+  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4`）。既存のメジャータグは動かさない（他アプリが意図せず
   巻き込まれないように）
 
 最新のタグは `git tag -l --sort=-creatordate` で確認するか、`CHANGELOG.md` を参照。

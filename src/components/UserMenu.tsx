@@ -12,6 +12,11 @@ import { buildLogoutUrl } from "../loginRedirect";
  *
  * Tailwind CSS のクラス名（slate系のカラーパレット等）をそのまま使っているため、
  * 導入するアプリのTailwind設定がこの配色を解決できることが前提。
+ *
+ * 狭い画面（320px級）でヘッダーからはみ出さないようにするには、呼び出し側でこのコンポーネントを
+ * 包む要素（例: `<div className="ml-auto">`）に `min-w-0` を付けること。flex項目は既定で
+ * 内容の最小幅より縮まないため、包む要素が縮められないと、こちらが縮められる作りでも
+ * ボタンは内容幅（約162px）のままはみ出す。`min-w-0` があれば、ボタンが縮んで名前が省略表示される。
  */
 export function UserMenu({ portalUrl, userName }: { portalUrl?: string; userName?: string }) {
   const [open, setOpen] = useState(false);
@@ -44,13 +49,13 @@ export function UserMenu({ portalUrl, userName }: { portalUrl?: string; userName
         type="button"
         onClick={() => setOpen((v) => !v)}
         title={displayName}
-        className="flex items-center gap-2 rounded-full border border-slate-200 py-1 pl-1 pr-3 hover:bg-slate-50"
+        className="flex max-w-full min-w-0 items-center gap-2 rounded-full border border-slate-200 py-1 pl-1 pr-3 hover:bg-slate-50"
       >
         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-500">
           <User size={13} />
         </span>
         {/* 長い名前・メールアドレス等でpillが縦長になる／ヘッダーからはみ出すのを防ぐ */}
-        <span className="max-w-[7rem] truncate text-xs font-medium text-slate-700 sm:max-w-[10rem]">
+        <span className="min-w-0 max-w-[7rem] truncate text-xs font-medium text-slate-700 sm:max-w-[10rem]">
           {displayName}
         </span>
       </button>
