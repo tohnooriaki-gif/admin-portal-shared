@@ -15,6 +15,7 @@ admin-portal-shared（統合ポータル配下の各アプリが共有する処�
 - [📅 2026-09-18（金）](#2026-09-18金)
 - [📅 2026-09-24（木）](#2026-09-24木)
 - [📅 2026-09-25（金）](#2026-09-25金)
+- [📅 2026-09-28（月）](#2026-09-28月)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -125,3 +126,22 @@ price-appで見つかった「長い文字列でボタン位置がずれる」�
 
 ### 📝 その他
 - 検証方法: 実際の`UserMenu.tsx`を修正前後で`esbuild`でバンドルし、Tailwind CLIで生成したCSSと合わせて実ブラウザで計測（テスト用ハーネスとサーバーは検証後に削除済み、リポジトリには含めない）。アプリ本体への組み込み後の確認は各アプリ側で必要
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 📅 2026-09-28（月）
+
+**概要：純粋ロジックにVitestのユニットテストを導入（v3.5）**
+
+ユーザー指示（統合ポータル全体で4リポジトリ中テストが無いのはadmin-portal-shared/admin-portal/receipt-app。影響範囲最大の共通化から着手）。技術選定は price-app と同一の Vitest。事前に規模（Tier1=純粋ロジックのみ／Tier2=UserMenuのインタラクション）を見積もり管理セッションに報告し、Tier1のみで承認を得て実施。
+
+### 🆕 追加
+- **`v3.5`** `tests/`配下にVitestのユニットテストを追加（`9365c62`）。対象8ファイル・45テスト、行/分岐/関数カバレッジ100%：`session`（signSession/verifySessionの往復、改ざん・別鍵・期限切れ・sub/name欠落でnull、role省略時の既定値、鍵未設定で例外）、`sessionHeaders`（name/roleの往復。**日本語roleのエンコード漏れ＝v3.1で修正した実バグの回帰防止として明記**）、`basePath`（通常付与・二重付与防止・絶対パス以外はそのまま。**READMEに書いてある既知のルート名衝突バグは直さず、現在の挙動を固定するテストとして明記**）、`loginRedirect`／`middlewareMatcher`／`db`／`format`／`supabase`（正常系・異常系）、`components/ui`（`createUiKit()`が返す文字列のみ検証。コンポーネントのレンダリング・見た目は対象外）
+- `package.json`に`test`/`test:watch`/`test:cov`スクリプトを追加。`vitest`/`@vitest/coverage-v8`/`vite`をdevDependenciesに追加（exportsの変更なし、非破壊的）
+
+### 🗑️ 削除
+- **（タグ管理対象外）** UserMenuのインタラクション（外側クリック/Escape。Tier2）のテストはユーザー判断で今回見送り、`TODO.md`（新設）に将来の候補として記録
+
+### 📝 その他
+- 環境メモ: npm 10.9.8/Node 22.23.2で`vitest`5.0.0の依存解決がnpmのバグ（`Cannot read properties of null (reading 'edgesOut')`）を踏むため、`npm install`は`--legacy-peer-deps`必須（README追記）。price-appは同じ`vitest`バージョンだがlockfile確定済みのため再現しない
+- `coverage/`を`.gitignore`に追加
