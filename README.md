@@ -9,6 +9,25 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
 
 開発ルール（コミット・プッシュの進め方等）は [`CLAUDE.md`](./CLAUDE.md) 参照。
 
+## テスト（v3.5〜）
+
+`tests/`配下にVitest（price-appと同一）でユニットテストがある。対象は`src/`配下の**純粋なロジック
+のみ**（`session`・`sessionHeaders`・`basePath`・`loginRedirect`・`middlewareMatcher`・`db`・
+`format`・`supabase`・`components/ui`の`createUiKit()`が返す文字列）。UIコンポーネント自体の
+レンダリング・見た目のスナップショットは対象外（`UserMenu`の外側クリック等のインタラクションは
+未着手、`TODO.md`参照）。
+
+```bash
+npm test          # 1回実行
+npm run test:watch
+npm run test:cov  # カバレッジ付き
+```
+
+**注意**: `npm install`は`--legacy-peer-deps`が必要（`vitest`5.0.0の依存解決で、npm 10.9.8/
+Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properties of null
+(reading 'edgesOut')`でクラッシュする既知のnpmの不具合を踏む。price-appも同じ`vitest`
+バージョンを使っているが、既にlockfileが確定しているため再現しない）。
+
 ## 何が入っているか（＝各アプリで実装が完全に一致すべき部分だけ）
 
 - `session`: `portal_session` JWT の検証（`verifySession`）・発行（`signSession`、shell専用）。`jose`/HS256。
@@ -83,7 +102,7 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.4"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.5"
 }
 ```
 
@@ -143,7 +162,7 @@ export const config = {
 
 - **破壊的変更**: メジャータグを切る（`v1` → `v2` → `v3`）
 - **非破壊的変更**（新規exportの追加・バグ修正・ドキュメント修正など）: マイナータグを切る
-  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4`）。既存のメジャータグは動かさない（他アプリが意図せず
+  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5`）。既存のメジャータグは動かさない（他アプリが意図せず
   巻き込まれないように）
 
 最新のタグは `git tag -l --sort=-creatordate` で確認するか、`CHANGELOG.md` を参照。
