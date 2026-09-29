@@ -16,6 +16,7 @@ admin-portal-shared（統合ポータル配下の各アプリが共有する処�
 - [📅 2026-09-24（木）](#2026-09-24木)
 - [📅 2026-09-25（金）](#2026-09-25金)
 - [📅 2026-09-28（月）](#2026-09-28月)
+- [📅 2026-09-29（火）](#2026-09-29火)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -145,3 +146,16 @@ price-appで見つかった「長い文字列でボタン位置がずれる」�
 ### 📝 その他
 - 環境メモ: npm 10.9.8/Node 22.23.2で`vitest`5.0.0の依存解決がnpmのバグ（`Cannot read properties of null (reading 'edgesOut')`）を踏むため、`npm install`は`--legacy-peer-deps`必須（README追記）。price-appは同じ`vitest`バージョンだがlockfile確定済みのため再現しない
 - `coverage/`を`.gitignore`に追加
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 📅 2026-09-29（火）
+
+**概要：Supabase統合準備として`createServiceClient`にスキーマ指定オプションを追加（v3.6）**
+
+管理セッションからの依頼（price-app・receipt-app・payment-appを1つのSupabaseプロジェクトに統合し、各アプリ専用スキーマを持たせる方針の準備）。実際の移行作業は今回行わず、共通クライアント生成部分のオプション追加のみ。
+
+### 🆕 追加
+- **`v3.6`** `createServiceClient(url, serviceRoleKey, options?)`に`options.schema`を追加。指定したPostgresスキーマを`db.schema`として`@supabase/supabase-js`の`createClient`に渡す。未指定時は従来通り`public`（既存の呼び出し元は無改修で動作、後方互換）
+- `tests/supabase.test.ts`にschema省略時/指定時のテストを追加（`client.rest.schemaName`で実際に設定されたスキーマ名を検証）。カバレッジ100%を維持
+- README: 非publicスキーマをSupabase Data API経由で使うには、Supabase側の管理画面（Project Settings > API > Exposed schemas）への追加登録が必要な旨を追記（実際の設定は統合先プロジェクト作成後）

@@ -45,9 +45,13 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
   （negative lookahead併用）がbasePathルート直下を素通りさせる不具合が price-app / receipt-app
   双方で見つかったため導入（v2〜）。`/api/`除外などアプリ固有の判断はここに含めない。
 
-- `supabase`: `createServiceClient(url, serviceRoleKey)`。サーバー専用Supabaseクライアント
+- `supabase`: `createServiceClient(url, serviceRoleKey, options?)`。サーバー専用Supabaseクライアント
   （service_role key。RLSバイパスにつき絶対にブラウザへ渡さないこと）。`ws`をrealtime transport
   に渡すワークアラウンド（Node18未満でグローバルWebSocketが無い問題への対処）を含む。
+  `options.schema`（v3.6〜）で対象のPostgresスキーマを指定できる（未指定なら従来通り`public`。
+  既存の呼び出し元は無改修で動く）。**注意**: 非publicスキーマをSupabase Data API経由で使うには、
+  Supabase側の管理画面（Project Settings > API > Exposed schemas）にそのスキーマを追加登録する
+  必要がある（このパッケージからは設定できない）。
 - `components/UserMenu`: ヘッダー右上のユーザーメニュー（`{ portalUrl, userName }`を受け取る）。
   「アプリ一覧へ戻る」「ログアウト」のドロップダウン。price-app/receipt-app双方で実装が完全に
   一致していたため共通化（v3〜）。v3.3で長い名前・メールアドレスへの耐性を追加（名前は
@@ -102,7 +106,7 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.5"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.6"
 }
 ```
 
@@ -162,7 +166,7 @@ export const config = {
 
 - **破壊的変更**: メジャータグを切る（`v1` → `v2` → `v3`）
 - **非破壊的変更**（新規exportの追加・バグ修正・ドキュメント修正など）: マイナータグを切る
-  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5`）。既存のメジャータグは動かさない（他アプリが意図せず
+  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6`）。既存のメジャータグは動かさない（他アプリが意図せず
   巻き込まれないように）
 
 最新のタグは `git tag -l --sort=-creatordate` で確認するか、`CHANGELOG.md` を参照。
