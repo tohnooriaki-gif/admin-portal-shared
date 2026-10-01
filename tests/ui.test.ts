@@ -17,6 +17,12 @@ describe("createUiKit", () => {
     expect(kit.inputClass).toContain("focus:ring-emerald-100");
   });
 
+  it("amber: inputClassにfocus:border-amber-400を含む", () => {
+    const kit = createUiKit("amber");
+    expect(kit.inputClass).toContain("focus:border-amber-400");
+    expect(kit.inputClass).toContain("focus:ring-amber-100");
+  });
+
   it("inputClassはinputClassBaseの先頭にw-fullを付けたもの", () => {
     const kit = createUiKit("indigo");
     expect(kit.inputClass).toBe(`w-full ${kit.inputClassBase}`);

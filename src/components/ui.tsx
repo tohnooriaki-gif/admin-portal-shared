@@ -50,7 +50,7 @@ export function Field({
   );
 }
 
-type Accent = "indigo" | "emerald";
+type Accent = "indigo" | "emerald" | "amber";
 
 const ACCENT_CLASSES: Record<Accent, { button: string; buttonHover: string; focusBorder: string; focusRing: string }> = {
   indigo: {
@@ -64,6 +64,12 @@ const ACCENT_CLASSES: Record<Accent, { button: string; buttonHover: string; focu
     buttonHover: "hover:bg-emerald-700",
     focusBorder: "focus:border-emerald-400",
     focusRing: "focus:ring-emerald-100",
+  },
+  amber: {
+    button: "bg-amber-600",
+    buttonHover: "hover:bg-amber-700",
+    focusBorder: "focus:border-amber-400",
+    focusRing: "focus:ring-amber-100",
   },
 };
 

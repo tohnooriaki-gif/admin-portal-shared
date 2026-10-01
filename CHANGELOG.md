@@ -17,6 +17,7 @@ admin-portal-shared（統合ポータル配下の各アプリが共有する処�
 - [📅 2026-09-25（金）](#2026-09-25金)
 - [📅 2026-09-28（月）](#2026-09-28月)
 - [📅 2026-09-29（火）](#2026-09-29火)
+- [📅 2026-10-01（木）](#2026-10-01木)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -159,3 +160,15 @@ price-appで見つかった「長い文字列でボタン位置がずれる」�
 - **`v3.6`** `createServiceClient(url, serviceRoleKey, options?)`に`options.schema`を追加。指定したPostgresスキーマを`db.schema`として`@supabase/supabase-js`の`createClient`に渡す。未指定時は従来通り`public`（既存の呼び出し元は無改修で動作、後方互換）
 - `tests/supabase.test.ts`にschema省略時/指定時のテストを追加（`client.rest.schemaName`で実際に設定されたスキーマ名を検証）。カバレッジ100%を維持
 - README: 非publicスキーマをSupabase Data API経由で使うには、Supabase側の管理画面（Project Settings > API > Exposed schemas）への追加登録が必要な旨を追記（実際の設定は統合先プロジェクト作成後）
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 📅 2026-10-01（木）
+
+**概要：`createUiKit`のACCENT_CLASSESにamberを追加（v3.7、payment-app向け）**
+
+payment-app担当からの依頼（管理セッション経由）。payment-appが`createUiKit`を使う際のアクセントカラー。
+
+### 🆕 追加
+- **`v3.7`** `ui.tsx`の`Accent`型・`ACCENT_CLASSES`に`amber`を追加（`bg-amber-600` / `hover:bg-amber-700` / `focus:border-amber-400` / `focus:ring-amber-100`）。既存のindigo/emeraldには影響なし、非破壊的な追加
+- `tests/ui.test.ts`にamberのテストを追加。カバレッジ100%を維持

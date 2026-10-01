@@ -69,7 +69,7 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
 - `components/ui`: UI基本部品。`Card` / `SecondaryButton` / `Field`はそのままexport。
   `PrimaryButton` / `inputClass` / `selectClass`（と、幅指定を含まない変種の
   `inputClassBase` / `selectClassBase`、v3.3〜）はアクセントカラー（price-app: indigo、
-  receipt-app: emerald）だけが違ったため、`createUiKit(accent)`で生成する形にした。
+  receipt-app: emerald、payment-app: amber（v3.7〜））だけが違ったため、`createUiKit(accent)`で生成する形にした。
   幅を自前で指定したい入力欄（`w-auto`・`w-28`・`flex-1`等）は`inputClassBase`を使うこと
   （`${inputClass} w-auto`は、Tailwindの生成順で`w-full`が後勝ちして効かず全幅になる）。
   ボタン類は`whitespace-nowrap`付き（v3.3〜）
@@ -106,7 +106,7 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.6"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.7"
 }
 ```
 
@@ -166,7 +166,7 @@ export const config = {
 
 - **破壊的変更**: メジャータグを切る（`v1` → `v2` → `v3`）
 - **非破壊的変更**（新規exportの追加・バグ修正・ドキュメント修正など）: マイナータグを切る
-  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6`）。既存のメジャータグは動かさない（他アプリが意図せず
+  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7`）。既存のメジャータグは動かさない（他アプリが意図せず
   巻き込まれないように）
 
 最新のタグは `git tag -l --sort=-creatordate` で確認するか、`CHANGELOG.md` を参照。
