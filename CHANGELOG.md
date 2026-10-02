@@ -188,3 +188,8 @@ payment-app担当からの依頼（管理セッション経由）。payment-app�
 
 ### 📝 その他
 - `TODO.md`に、`SelectCell.tsx`のクリック伝播インタラクションはTier 1 Vitestの対象外である旨を追記（`UserMenu.tsx`と同様の理由。実ブラウザでは検証済み）
+
+### `SelectCell`の幅が縮む不具合（price-appからのフィードバック）
+
+#### 🐛 修正
+- **`v3.9`** `SelectCell`/`SelectAllCell`の既定`className`を`"w-12 p-0"`から`"w-12 min-w-[3rem] p-0"`に変更。table auto layoutでは`w-*`だけだと「希望幅」に過ぎないため、他の列が広いテーブル（price-appの商品一覧は`min-w-[960px]`）ではこの列がチェックボックス本体の幅（16px）まで縮み、せっかく広げたクリック領域（labelが16×44pxに縮小）が意味を成さなくなる不具合があった。price-appが`className="w-12 min-w-[3rem] p-0"`を自前で渡して回避・報告（置き換えpush済み）。`min-w`併記の必要性をソースのJSDoc・READMEにも明記

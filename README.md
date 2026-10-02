@@ -92,7 +92,11 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
   遷移の仕組みは含まないため、各アプリ側の既存の行コンポーネントと組み合わせて使うこと。
   `SelectCell`の`selectable={false}`で、選べない行でもチェックボックス無しで行遷移だけを
   止められる。アクセントカラー（`accent-amber-600`等）やセル幅は`className`/
-  `inputClassName`で上書き可能。UIコンポーネントのため`components/ui`と同様、呼び出し側
+  `inputClassName`で上書き可能。**注意（v3.9〜）**: `className`で幅を上書きするときは
+  `min-w`も併記すること（table auto layoutでは`w-*`だけだと「希望幅」に過ぎず、他の列が
+  広いテーブルではこの列がチェックボックス本体の幅＝16pxまで縮み、クリック領域も狭くなる。
+  price-appで実際に踏んだ不具合。既定値`w-12 min-w-[3rem] p-0`は対応済み）。UIコンポーネント
+  のため`components/ui`と同様、呼び出し側
   ファイルに`"use client"`が必要（モジュール自体にも付与済み）。レンダリング・クリック
   伝播の挙動は実ブラウザで検証済み（Vitestのユニットテストはcomponents/uiと同様、見た目・
   インタラクションは対象外）。
@@ -122,7 +126,7 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.8"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.9"
 }
 ```
 
@@ -182,7 +186,7 @@ export const config = {
 
 - **破壊的変更**: メジャータグを切る（`v1` → `v2` → `v3`）
 - **非破壊的変更**（新規exportの追加・バグ修正・ドキュメント修正など）: マイナータグを切る
-  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8`）。既存のメジャータグは動かさない（他アプリが意図せず
+  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9`）。既存のメジャータグは動かさない（他アプリが意図せず
   巻き込まれないように）
 
 最新のタグは `git tag -l --sort=-creatordate` で確認するか、`CHANGELOG.md` を参照。

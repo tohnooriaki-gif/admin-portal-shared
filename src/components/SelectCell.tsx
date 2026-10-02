@@ -12,6 +12,10 @@
  *
  * 行の`<tr>`自体の実装（クリックで遷移する仕組みそのもの）は含まない。各アプリ側の既存の行
  * コンポーネント（price-appの`ClickableRow`等）と組み合わせて使うこと。
+ *
+ * **注意（v3.9〜）**: `className`で幅を上書きする場合は`min-w`も併記すること。table auto
+ * layoutでは`w-*`だけだと「希望幅」に過ぎず、他の列が広いテーブルではこの列がチェックボックス
+ * 本体の幅（16px）まで縮み、クリック領域も狭くなる（price-appで実際に踏んだ不具合）。
  */
 
 interface SelectCellProps {
@@ -24,13 +28,18 @@ interface SelectCellProps {
    * （「選べない行」でも誤って詳細へ飛ばないようにするため）
    */
   selectable?: boolean;
-  /** `<td>`に渡すclassName（既定: 幅12・パディング無し。幅はテーブルに応じて上書き可） */
+  /**
+   * `<td>`に渡すclassName（既定: 幅12・パディング無し。幅はテーブルに応じて上書き可）。
+   * `min-w`も併記すること（table auto layoutでは`w-12`だけだと希望幅に過ぎず、他の列が
+   * 広いテーブルではこの列が16px＝チェックボックス幅まで縮み、クリック領域も狭くなる。
+   * price-appで実際に踏んだ不具合、v3.9で既定値に追加）。
+   */
   className?: string;
   /** チェックボックス本体のclassName（既定の大きさ・枠線に追加。アクセントカラー等はここで指定） */
   inputClassName?: string;
 }
 
-const DEFAULT_CELL_CLASSNAME = "w-12 p-0";
+const DEFAULT_CELL_CLASSNAME = "w-12 min-w-[3rem] p-0";
 const DEFAULT_INPUT_CLASSNAME = "h-4 w-4 cursor-pointer rounded border-slate-300";
 
 /** 一覧テーブルの本体行にある、個別選択用チェックボックスの`<td>`。 */
@@ -64,6 +73,7 @@ interface SelectAllCellProps {
   onChange: (checked: boolean) => void;
   ariaLabel: string;
   disabled?: boolean;
+  /** `<th>`に渡すclassName。`SelectCell`の`className`と同じ理由で`min-w`も併記すること。 */
   className?: string;
   inputClassName?: string;
 }
