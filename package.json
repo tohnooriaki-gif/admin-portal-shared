@@ -14,7 +14,8 @@
     "./components/UserMenu": "./src/components/UserMenu.tsx",
     "./db": "./src/db.ts",
     "./format": "./src/format.ts",
-    "./components/ui": "./src/components/ui.tsx"
+    "./components/ui": "./src/components/ui.tsx",
+    "./components/SelectCell": "./src/components/SelectCell.tsx"
   },
   "scripts": {
     "test": "vitest run",

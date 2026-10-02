@@ -81,8 +81,24 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
   server」エラーになる）。アイコンをpropsで渡す等サーバーコンポーネントからも使いたい
   ものが同じファイルに混在するなら、`createUiKit()`を呼ぶ部分だけ別ファイルに分離する
   （price-appの`components/ui-shared.tsx`が実例）。
+- `components/SelectCell`: 行クリックで詳細へ遷移する一覧テーブルの、チェックボックス列
+  （v3.8〜）。`SelectCell`（本体行の`<td>`、個別選択用）と`SelectAllCell`（ヘッダーの`<th>`、
+  ページ全選択用）の2つをexport。price-app（商品一覧）・payment-app（請求一覧）で個別に
+  直した「チェックボックスが小さく、少しずれると行の詳細遷移が発火してしまう」問題
+  （2026-10-02）を統一した実装。`<label>`でセル全体をクリック領域にし（ブラウザ標準の
+  label→input委譲を使うため、クリック位置の自前判定が不要）、セルの`onClick`で
+  `stopPropagation`することで行側のクリックハンドラの実装方法（`closest()`で除外する
+  方式・素の`onClick`のみの方式、どちらでも）を問わず機能する。行の`<tr>`自体のクリック
+  遷移の仕組みは含まないため、各アプリ側の既存の行コンポーネントと組み合わせて使うこと。
+  `SelectCell`の`selectable={false}`で、選べない行でもチェックボックス無しで行遷移だけを
+  止められる。アクセントカラー（`accent-amber-600`等）やセル幅は`className`/
+  `inputClassName`で上書き可能。UIコンポーネントのため`components/ui`と同様、呼び出し側
+  ファイルに`"use client"`が必要（モジュール自体にも付与済み）。レンダリング・クリック
+  伝播の挙動は実ブラウザで検証済み（Vitestのユニットテストはcomponents/uiと同様、見た目・
+  インタラクションは対象外）。
 
-**Tailwindを使うUI系モジュール（`components/UserMenu`・`components/ui`）の注意**:
+**Tailwindを使うUI系モジュール（`components/UserMenu`・`components/ui`・`components/SelectCell`）
+の注意**:
 各アプリの`tailwind.config.js`の`content`に、このパッケージのソースを含めること
 （例: `"./node_modules/admin-portal-shared/src/**/*.{ts,tsx}"`）。含めないと、アプリ側の
 コードに同じクラス名が偶然残っていない限りTailwindがこれらのクラスを生成せず、見た目が
@@ -106,7 +122,7 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.7"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.8"
 }
 ```
 
@@ -166,7 +182,7 @@ export const config = {
 
 - **破壊的変更**: メジャータグを切る（`v1` → `v2` → `v3`）
 - **非破壊的変更**（新規exportの追加・バグ修正・ドキュメント修正など）: マイナータグを切る
-  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7`）。既存のメジャータグは動かさない（他アプリが意図せず
+  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8`）。既存のメジャータグは動かさない（他アプリが意図せず
   巻き込まれないように）
 
 最新のタグは `git tag -l --sort=-creatordate` で確認するか、`CHANGELOG.md` を参照。
