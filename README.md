@@ -15,7 +15,7 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
 のみ**（`session`・`sessionHeaders`・`basePath`・`loginRedirect`・`middlewareMatcher`・`db`・
 `format`・`supabase`・`components/ui`の`createUiKit()`が返す文字列）。UIコンポーネント自体の
 レンダリング・見た目のスナップショットは対象外（`UserMenu`の外側クリック等のインタラクションは
-未着手、`TODO.md`参照）。
+未着手。全体管理セッションのTODO.mdで管理、`TODO.md`参照）。
 
 ```bash
 npm test          # 1回実行

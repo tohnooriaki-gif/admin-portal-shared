@@ -203,3 +203,4 @@ payment-app担当からの依頼（管理セッション経由）。payment-app�
 
 ### 📝 その他
 - **（タグ管理対象外）** 管理セッションの棚卸しを受け、保留中の事項3件（basePathのルート名衝突ガードの再設計／AUTH_AWARE_MATCHERのexport継続可否／SelectCellのclassName上書き時のmin-w）を`TODO.md`に記録。コード変更なし
+- **（タグ管理対象外）** メモ・未着手タスクの一元管理化（ユーザー指示、全体管理セッションの`D:\dev\admin-portal-management\TODO.md`へ）に伴い、上記3件とTier 2テストの一覧を全体管理TODO.mdへ移し、このリポジトリの`TODO.md`はポインタのみに整理。READMEの`TODO.md`参照の文言も更新。コード変更なし
