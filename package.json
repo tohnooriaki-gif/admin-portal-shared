@@ -15,7 +15,8 @@
     "./db": "./src/db.ts",
     "./format": "./src/format.ts",
     "./components/ui": "./src/components/ui.tsx",
-    "./components/SelectCell": "./src/components/SelectCell.tsx"
+    "./components/SelectCell": "./src/components/SelectCell.tsx",
+    "./components/StickyActionBar": "./src/components/StickyActionBar.tsx"
   },
   "scripts": {
     "test": "vitest run",

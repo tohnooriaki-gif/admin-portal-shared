@@ -204,3 +204,13 @@ payment-app担当からの依頼（管理セッション経由）。payment-app�
 ### 📝 その他
 - **（タグ管理対象外）** 管理セッションの棚卸しを受け、保留中の事項3件（basePathのルート名衝突ガードの再設計／AUTH_AWARE_MATCHERのexport継続可否／SelectCellのclassName上書き時のmin-w）を`TODO.md`に記録。コード変更なし
 - **（タグ管理対象外）** メモ・未着手タスクの一元管理化（ユーザー指示、全体管理セッションの`D:\dev\admin-portal-management\TODO.md`へ）に伴い、上記3件とTier 2テストの一覧を全体管理TODO.mdへ移し、このリポジトリの`TODO.md`はポインタのみに整理。READMEの`TODO.md`参照の文言も更新。コード変更なし
+
+### 長い画面の保存ボタンを画面下端に固定する帯の共通化（v3.10）
+
+管理セッションからの依頼（ユーザー指示）。長い画面で保存(確定)ボタンが最下部にあって使いづらい問題が3アプリで見つかり、receipt-appが`sticky bottom-0`の固定バーで直した（`7ef4903`）方式を、price-app・payment-appでも使えるよう共通化した。payment-appの既存の浮かぶ帯（請求一覧の「まとめて入金」、`sticky bottom-4`・amber）と、入金の登録・編集のform内の送信ボタン・合計表示の要件も取り込んだ。
+
+#### 🆕 追加
+- **`v3.10`** `components/StickyActionBar`を新設。左に`status`（未保存の表示・合計・エラー等）、右に`children`（ボタン）、狭い幅では折り返す。`variant`: `"bar"`（既定、画面下端に密着・上線のみ）／`"floating"`（下端から16px浮いた角丸のカード）。`accent`: `"neutral"`（既定、白背景＋グレーの線）／`"indigo"`・`"emerald"`・`"amber"`（`createUiKit`と同じ名前、線と背景がその色の薄い色）。iPhoneのセーフエリア下部の余白は`env(safe-area-inset-bottom)`で確保（`viewport-fit=cover`未指定なら既定の余白のみ）
+- SelectCellのmin-w（v3.9）の教訓として、**`className`は追加分だけ**の作りにした。固定表示に必要な指定（sticky・bottom・z-index・背景・線）は常に効き、`className`は後ろに足されるだけで置き換えない。背景・線の色はTailwindでは`className`の後勝ちにならないため上書き不可とし、色は`accent`・形は`variant`で選ぶ。`"use client"`は付けていない（状態・イベントを持たず、Server Componentからも使える）
+- `tests/stickyActionBar.test.ts`（7テスト）: `className`を渡しても固定表示用の指定が消えないこと、variant/accentごとのクラス、`status`の有無を検証（状態を持たない関数を直接呼んで返る要素のpropsを見る方式。`jsdom`等は不要）
+- 実ブラウザでの検証（esbuild＋Tailwind CLI＋ローカルサーバーの検証ハーネス）: 長いフォーム（40行）でスクロール位置が先頭・中ほどでも帯が画面下端に密着し、フォーム末尾では通常の位置に戻ること／帯の中の`type="submit"`でフォームが送信されること／幅375pxで`status`が折り返しボタンが右寄せの下段に並び、横スクロールが出ないこと／`floating`＋`amber`で下端から16px浮き、amber-50/95の背景・amber-300の枠線・角丸・影になること。`env(safe-area-inset-bottom)`は実機（iPhone）では未確認（ブラウザではフォールバックの12pxになることのみ確認）

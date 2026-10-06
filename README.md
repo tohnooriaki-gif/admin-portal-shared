@@ -13,7 +13,7 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
 
 `tests/`配下にVitest（price-appと同一）でユニットテストがある。対象は`src/`配下の**純粋なロジック
 のみ**（`session`・`sessionHeaders`・`basePath`・`loginRedirect`・`middlewareMatcher`・`db`・
-`format`・`supabase`・`components/ui`の`createUiKit()`が返す文字列）。UIコンポーネント自体の
+`format`・`supabase`・`components/ui`の`createUiKit()`が返す文字列・`components/StickyActionBar`のクラス組み立て）。UIコンポーネント自体の
 レンダリング・見た目のスナップショットは対象外（`UserMenu`の外側クリック等のインタラクションは
 未着手。全体管理セッションのTODO.mdで管理、`TODO.md`参照）。
 
@@ -100,9 +100,52 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
   ファイルに`"use client"`が必要（モジュール自体にも付与済み）。レンダリング・クリック
   伝播の挙動は実ブラウザで検証済み（Vitestのユニットテストはcomponents/uiと同様、見た目・
   インタラクションは対象外）。
+- `components/StickyActionBar`: 長い画面（表・長いフォーム）で、保存・確定などのボタンを画面
+  下端に固定して常に見えるようにする帯（v3.10〜）。receipt-appの`sticky bottom-0`の固定バー
+  （取引先マスタ・PDF取込の確認画面）とpayment-appの浮かぶ帯（請求一覧）を統一した。
+  左に`status`（「未保存の変更があります」・合計・エラー等、画面ごとに違う表示）、右に
+  `children`（ボタン）。狭い幅では折り返し、ボタンは右寄せのまま下の段に並ぶ。
+  `variant`: `"bar"`（既定、画面下端に密着・上線のみ）／`"floating"`（下端から16px浮いた
+  角丸のカード・枠線・影付き）。`accent`: `"neutral"`（既定、白背景＋グレーの線）／`"indigo"`・
+  `"emerald"`・`"amber"`（`createUiKit`と同じ名前。線と背景がその色の薄い色になる）。
+  **`className`は追加分だけ**（SelectCellのmin-wの教訓）: 固定表示に必要な指定は常に効き、
+  `className`は後ろに足されるだけで置き換えない（`mt-4`等の余白の追加用）。背景・線の色を
+  `className`で上書きすることはできない（Tailwindは同じプロパティを2つ書いても後勝ちに
+  ならない）ので、色は`accent`、形は`variant`で選ぶ。新しいアクセントは`createUiKit`の
+  `ACCENT_CLASSES`と`StickyActionBar.tsx`の`COLOR_CLASSES`の両方に追加すること。
+  **使い方の注意**: (1)`sticky`は祖先に`overflow-hidden`/`overflow-auto`（`overflow-x-auto`の
+  表ラッパー等）があると効かない。帯はそれらの**外側**に置く (2)帯は、固定したい対象と同じ親の
+  中、その**後ろ**に置く（親の終わりで通常位置に戻る） (3)`<form>`の中に置け、中の
+  `type="submit"`はそのまま送信する。フォームの外に置くときはボタンに`form="フォームのid"`を
+  付ける (4)`Card`の中に置くと幅はカードの内側になる（画面幅いっぱいにしたいなら外に置く）
+  (5)iPhoneのセーフエリア余白は`env(safe-area-inset-bottom)`で確保しているが、アプリ側が
+  `viewport-fit=cover`（Next.jsなら`viewport`の`viewportFit: "cover"`）を指定していないと
+  常に0扱いで既定の余白だけになる（害は無い）。状態・イベントを持たないため`"use client"`は
+  付けておらず、Server Componentからも使える。
+  ```tsx
+  <form onSubmit={save}>
+    {/* ...長いフォーム... */}
+    <StickyActionBar
+      className="mt-4"
+      status={dirty ? <span className="font-medium text-amber-600">未保存の変更があります</span> : msg}
+    >
+      <SecondaryButton type="button" onClick={cancel}>キャンセル</SecondaryButton>
+      <PrimaryButton type="submit" disabled={saving}>{saving ? "保存中..." : "保存する"}</PrimaryButton>
+    </StickyActionBar>
+  </form>
 
-**Tailwindを使うUI系モジュール（`components/UserMenu`・`components/ui`・`components/SelectCell`）
-の注意**:
+  {/* 行を選ぶと出る「まとめて操作」の帯（payment-app流）。表ラッパーの外側・後ろに置く */}
+  {selected.size > 0 && (
+    <StickyActionBar variant="floating" accent="amber" className="mt-5" status={`${selected.size}件を選択中`}>
+      <PrimaryButton onClick={bulkDeposit}>まとめて入金</PrimaryButton>
+    </StickyActionBar>
+  )}
+  ```
+  レンダリング・スクロール時の固定・スマホ幅の挙動は実ブラウザで検証済み。Vitestは`className`を
+  渡しても固定表示用の指定が消えないこと等のクラス組み立てのみ検証（`tests/stickyActionBar.test.ts`）。
+
+**Tailwindを使うUI系モジュール（`components/UserMenu`・`components/ui`・`components/SelectCell`・
+`components/StickyActionBar`）の注意**:
 各アプリの`tailwind.config.js`の`content`に、このパッケージのソースを含めること
 （例: `"./node_modules/admin-portal-shared/src/**/*.{ts,tsx}"`）。含めないと、アプリ側の
 コードに同じクラス名が偶然残っていない限りTailwindがこれらのクラスを生成せず、見た目が
@@ -126,7 +169,7 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.9"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.10"
 }
 ```
 
@@ -186,7 +229,7 @@ export const config = {
 
 - **破壊的変更**: メジャータグを切る（`v1` → `v2` → `v3`）
 - **非破壊的変更**（新規exportの追加・バグ修正・ドキュメント修正など）: マイナータグを切る
-  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9`）。既存のメジャータグは動かさない（他アプリが意図せず
+  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9` → `v3.10`）。既存のメジャータグは動かさない（他アプリが意図せず
   巻き込まれないように）
 
 最新のタグは `git tag -l --sort=-creatordate` で確認するか、`CHANGELOG.md` を参照。
