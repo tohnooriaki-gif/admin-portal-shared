@@ -214,3 +214,14 @@ payment-app担当からの依頼（管理セッション経由）。payment-app�
 - SelectCellのmin-w（v3.9）の教訓として、**`className`は追加分だけ**の作りにした。固定表示に必要な指定（sticky・bottom・z-index・背景・線）は常に効き、`className`は後ろに足されるだけで置き換えない。背景・線の色はTailwindでは`className`の後勝ちにならないため上書き不可とし、色は`accent`・形は`variant`で選ぶ。`"use client"`は付けていない（状態・イベントを持たず、Server Componentからも使える）
 - `tests/stickyActionBar.test.ts`（7テスト）: `className`を渡しても固定表示用の指定が消えないこと、variant/accentごとのクラス、`status`の有無を検証（状態を持たない関数を直接呼んで返る要素のpropsを見る方式。`jsdom`等は不要）
 - 実ブラウザでの検証（esbuild＋Tailwind CLI＋ローカルサーバーの検証ハーネス）: 長いフォーム（40行）でスクロール位置が先頭・中ほどでも帯が画面下端に密着し、フォーム末尾では通常の位置に戻ること／帯の中の`type="submit"`でフォームが送信されること／幅375pxで`status`が折り返しボタンが右寄せの下段に並び、横スクロールが出ないこと／`floating`＋`amber`で下端から16px浮き、amber-50/95の背景・amber-300の枠線・角丸・影になること。`env(safe-area-inset-bottom)`は実機（iPhone）では未確認（ブラウザではフォールバックの12pxになることのみ確認）
+
+### `AUTH_AWARE_MATCHER`の非推奨化（v3.11）
+
+管理セッション経由のユーザー判断（2026-10-06）。「export し続ける意味があるか」を再検討するため全アプリの使い方を調べたところ、どのアプリも`AUTH_AWARE_MATCHER`をimportしておらず（price-app・receipt-app・payment-appは`["/:path*"]`のリテラルを自前で書き、importするのは`isStaticAssetPath`のみ。admin-portal本体は独自のmatcherで`middlewareMatcher`自体を使っていない）、Next.jsの静的解析の制約上import先として使えない定数だった。削除は慣例上破壊的変更になるため、次の破壊的変更（v4）のついでに行うこととし、まず非推奨化した。
+
+#### 🔄 変更
+- **`v3.11`** `AUTH_AWARE_MATCHER`のJSDocに`@deprecated`を追加（値は`["/:path*"]`のまま、コードの動作は変えない）。READMEの`middlewareMatcher`の説明にも非推奨・v4で削除予定の旨を明記
+- **`v3.11`** READMEの使用例（middleware.ts）から、使っていない`AUTH_AWARE_MATCHER`のimport行を外し（コピーすると未使用importになるため）、`config.matcher`の注釈を「importせずリテラルを写す。値の目安は非推奨の定数」に書き直した
+
+#### 📝 その他
+- `SelectCell`の`className`が上書き（マージなし）である件は、ユーザー判断で現状維持（README/JSDocの注意書きのまま）。次の破壊的変更（v4）が出たときに再検討する（全体管理TODO.mdで管理）

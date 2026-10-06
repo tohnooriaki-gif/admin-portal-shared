@@ -19,6 +19,11 @@
  * 実際に踏んだ不具合。basePath直下の認証バイパス対策が無効化されたまま気づかず本番
  * 稼働していたことがある）。`config.matcher` にはこの定数の中身をリテラルで書くこと
  * （`admin-portal-shared` の README の使用例を参照）。
+ *
+ * @deprecated v3.11〜。import しても `config.matcher` に渡せず、実際にどのアプリも import して
+ * いない（各アプリが `["/:path*"]` のリテラルを自前で書いている）ため、使わないこと。値の目安
+ * （`["/:path*"]`）を示すだけの定数として残してあり、次の破壊的変更（v4）で削除する予定。
+ * `isStaticAssetPath` は非推奨ではない。
  */
 export const AUTH_AWARE_MATCHER = ["/:path*"];
 

@@ -40,8 +40,10 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
   basePathが付かない。該当するアプリはこのモジュールを使わず独自実装で対応すること
   （price-appはこの理由で不採用）。
 - `loginRedirect`: 未認証時の `${PORTAL_URL}/login?redirect=...` 組み立てと、ログアウト遷移先の組み立て。
-- `middlewareMatcher`: `AUTH_AWARE_MATCHER`（middlewareのmatcher設定）と `isStaticAssetPath()`
-  （`_next/static`/`_next/image`/`favicon.ico` の除外判定）。basePath配下で絞り込みmatcher
+- `middlewareMatcher`: `isStaticAssetPath()`（`_next/static`/`_next/image`/`favicon.ico` の
+  除外判定）と、`AUTH_AWARE_MATCHER`（`["/:path*"]`。**v3.11〜非推奨**: `config.matcher`はimport
+  不可でリテラルを写すしかなく、どのアプリもimportしていない。値の目安として残してあり、次の
+  破壊的変更（v4）で削除予定）。basePath配下で絞り込みmatcher
   （negative lookahead併用）がbasePathルート直下を素通りさせる不具合が price-app / receipt-app
   双方で見つかったため導入（v2〜）。`/api/`除外などアプリ固有の判断はここに含めない。
 
@@ -169,7 +171,7 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.10"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.11"
 }
 ```
 
@@ -196,7 +198,7 @@ module.exports = {
 import { NextRequest, NextResponse } from "next/server";
 import { verifySession, PORTAL_SESSION_COOKIE } from "admin-portal-shared/session";
 import { buildLoginRedirectUrl } from "admin-portal-shared/loginRedirect";
-import { AUTH_AWARE_MATCHER, isStaticAssetPath } from "admin-portal-shared/middlewareMatcher";
+import { isStaticAssetPath } from "admin-portal-shared/middlewareMatcher";
 
 const BASE_PATH = "/delivery";
 
@@ -215,8 +217,8 @@ export async function middleware(req: NextRequest) {
 // Next.js は middleware の config.matcher をビルド時に静的解析するため、import した
 // 定数をそのまま渡すと認識されず「デフォルト設定」に**警告だけで黙って**フォールバックする
 // （price-app / receipt-app 双方で実際に踏んだ不具合。basePath直下の認証バイパス対策が
-// 無効化されたまま気づかず本番稼働していたことがある）。値は必ずリテラルで書き、
-// AUTH_AWARE_MATCHER の中身と一致させること。
+// 無効化されたまま気づかず本番稼働していたことがある）。値は必ずこのようにリテラルで書く
+// （importせず写す。値の目安は非推奨の定数 AUTH_AWARE_MATCHER = ["/:path*"]）。
 export const config = {
   matcher: ["/:path*"],
 };
@@ -229,7 +231,7 @@ export const config = {
 
 - **破壊的変更**: メジャータグを切る（`v1` → `v2` → `v3`）
 - **非破壊的変更**（新規exportの追加・バグ修正・ドキュメント修正など）: マイナータグを切る
-  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9` → `v3.10`）。既存のメジャータグは動かさない（他アプリが意図せず
+  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9` → `v3.10` → `v3.11`）。既存のメジャータグは動かさない（他アプリが意図せず
   巻き込まれないように）
 
 最新のタグは `git tag -l --sort=-creatordate` で確認するか、`CHANGELOG.md` を参照。
