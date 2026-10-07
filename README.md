@@ -13,7 +13,7 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
 
 `tests/`配下にVitest（price-appと同一）でユニットテストがある。対象は`src/`配下の**純粋なロジック
 のみ**（`session`・`sessionHeaders`・`basePath`・`loginRedirect`・`middlewareMatcher`・`db`・
-`format`・`supabase`・`components/ui`の`createUiKit()`が返す文字列・`components/StickyActionBar`のクラス組み立て）。UIコンポーネント自体の
+`format`・`supabase`・`components/ui`の`createUiKit()`が返す文字列・`components/StickyActionBar`・`components/SearchValue`のクラス組み立て）。UIコンポーネント自体の
 レンダリング・見た目のスナップショットは対象外（`UserMenu`の外側クリック等のインタラクションは
 未着手。全体管理セッションのTODO.mdで管理、`TODO.md`参照）。
 
@@ -145,9 +145,30 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
   ```
   レンダリング・スクロール時の固定・スマホ幅の挙動は実ブラウザで検証済み。Vitestは`className`を
   渡しても固定表示用の指定が消えないこと等のクラス組み立てのみ検証（`tests/stickyActionBar.test.ts`）。
+- `components/SearchValue`: 一覧の値（顧客名・コード・担当者・品名など）を押すと、その値で検索する
+  ボタン（v3.12〜）。payment-app（請求一覧・操作履歴）とreceipt-app（品目一覧の品名）で個別に
+  作っていたものを共通化した。props: `value`（空なら何も描画しない。空のときに「-」を出したい
+  ときは呼び出し側で出す）、`onSearch(value)`、`accent`（`"neutral"`[既定]/`"indigo"`/`"emerald"`/
+  `"amber"`。ホバー・フォーカス時の文字色。`createUiKit`・`StickyActionBar`と同じ名前）、
+  `title`（既定「『値』で検索」。「『値』で再検索」等に上書き可）、`stopPropagation`（既定`true`。
+  クリックを行へ伝えない）、`className`（**追加分のみ**。`truncate`・`flex-1`・`min-w-0`・
+  `font-medium`等を足す用途で、既定のクラスは置き換わらない。ホバー色の上書きはできないので
+  `accent`で選ぶ）。検索の中身（検索欄へ入れる・ほかの絞り込みを外す・完全一致など）は共通化せず、
+  `onSearch`で呼び出し側が決める。**ホバーの手がかり**は、色の変化＋**点線**の下線（普段は装飾
+  なし）。詳細へ移動するリンクの`hover:underline`（実線）と見分けがつくようにしてある。
+  新しいアクセントは`createUiKit`の`ACCENT_CLASSES`・`StickyActionBar`の`COLOR_CLASSES`・
+  `SearchValue.tsx`の`HOVER_CLASSES`に追加すること。`"use client"`付き。
+  ```tsx
+  <SearchValue value={inv.customerName} onSearch={searchByValue} accent="amber" />
+  {/* receipt-app流: 長い品名を省略表示し、「再検索」のtitleにする */}
+  <SearchValue value={r.name} onSearch={searchByName} accent="emerald" title={`「${r.name}」で再検索`}
+    className="min-w-0 flex-1 truncate font-medium" />
+  ```
+  ホバーの色・点線・クリックが行へ伝わらないこと・`truncate`の挙動は実ブラウザで検証済み。Vitestは
+  クラス組み立て・`title`・`onSearch`の呼び出し・`stopPropagation`の有無のみ（`tests/searchValue.test.ts`）。
 
 **Tailwindを使うUI系モジュール（`components/UserMenu`・`components/ui`・`components/SelectCell`・
-`components/StickyActionBar`）の注意**:
+`components/StickyActionBar`・`components/SearchValue`）の注意**:
 各アプリの`tailwind.config.js`の`content`に、このパッケージのソースを含めること
 （例: `"./node_modules/admin-portal-shared/src/**/*.{ts,tsx}"`）。含めないと、アプリ側の
 コードに同じクラス名が偶然残っていない限りTailwindがこれらのクラスを生成せず、見た目が
@@ -171,7 +192,7 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.11"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.12"
 }
 ```
 
@@ -231,7 +252,7 @@ export const config = {
 
 - **破壊的変更**: メジャータグを切る（`v1` → `v2` → `v3`）
 - **非破壊的変更**（新規exportの追加・バグ修正・ドキュメント修正など）: マイナータグを切る
-  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9` → `v3.10` → `v3.11`）。既存のメジャータグは動かさない（他アプリが意図せず
+  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9` → `v3.10` → `v3.11` → `v3.12`）。既存のメジャータグは動かさない（他アプリが意図せず
   巻き込まれないように）
 
 最新のタグは `git tag -l --sort=-creatordate` で確認するか、`CHANGELOG.md` を参照。

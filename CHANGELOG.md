@@ -20,6 +20,7 @@ admin-portal-shared（統合ポータル配下の各アプリが共有する処�
 - [📅 2026-10-01（木）](#2026-10-01木)
 - [📅 2026-10-02（金）](#2026-10-02金)
 - [📅 2026-10-06（火）](#2026-10-06火)
+- [📅 2026-10-07（水）](#2026-10-07水)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -225,3 +226,20 @@ payment-app担当からの依頼（管理セッション経由）。payment-app�
 
 #### 📝 その他
 - `SelectCell`の`className`が上書き（マージなし）である件は、ユーザー判断で現状維持（README/JSDocの注意書きのまま）。次の破壊的変更（v4）が出たときに再検討する（全体管理TODO.mdで管理）
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 📅 2026-10-07（水）
+
+**概要：一覧の値を押すとその値で検索するボタンを共通化（`components/SearchValue`、v3.12）**
+
+管理セッション経由のユーザー指示。payment-app（請求一覧・操作履歴、`components/SearchValue.tsx`、`ca4c3bd`）とreceipt-app（品目一覧`ItemExplorer.tsx`の品名）に、ほぼ同じ形のボタンが個別にあったため共通化した。payment-app版を土台にした。
+
+### 🆕 追加
+- **`v3.12`** `components/SearchValue`を新設。props: `value`（空なら`null`）、`onSearch(value)`、`accent`（`neutral`[既定]/`indigo`/`emerald`/`amber`、ホバー・フォーカス時の文字色）、`title`（既定「『値』で検索」、上書き可）、`stopPropagation`（既定`true`）、`className`（**追加のみ**。`truncate`・`flex-1`・`min-w-0`等を足す用途で、既定のクラスは置き換わらない。SelectCellのmin-wの教訓）。検索の中身は共通化せず`onSearch`で呼び出し側が決める。`"use client"`付き。既存のAPIは変更なし
+- **ホバーの手がかりをリンクと区別**: payment-appで、詳細へ移動するリンクの`hover:underline`（実線）とSearchValueの下線が同じに見えて紛らわしいという指摘があったため、SearchValueは**色の変化＋点線の下線**（`hover:underline hover:decoration-dotted`、`focus-visible`も同様）にした。普段は装飾なしで一覧の見た目は変えない。実ブラウザで、ホバー時にSearchValueは点線（amber-700）、リンクは実線になることを確認
+- `tests/searchValue.test.ts`（7テスト）: 空値で`null`、`title`の既定と上書き、`onSearch`の呼び出しと`stopPropagation`の有無、`className`が追加のみであること、ホバーの点線、`accent`ごとのホバー色
+- 実ブラウザでの検証: 値のボタンを押しても行のクリックが発火せず`onSearch`だけが呼ばれること（行の空きセルを押すと行のクリックが発火することも確認）、`className`の`min-w-0 flex-1 truncate`で長い名前が省略表示され隣の要素が潰れないこと、空の`value`では何も描画されないこと
+
+### 📝 その他
+- receipt-appの品名ボタンは、空のときに「-」を表示し`disabled`にしている。共通版は空なら`null`のため、receipt-app側で空のときの表示（「-」）を自前で出す必要がある（READMEに明記）
