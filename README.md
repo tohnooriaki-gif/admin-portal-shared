@@ -13,7 +13,7 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
 
 `tests/`配下にVitest（price-appと同一）でユニットテストがある。対象は`src/`配下の**純粋なロジック
 のみ**（`session`・`sessionHeaders`・`basePath`・`loginRedirect`・`middlewareMatcher`・`db`・
-`format`・`supabase`・`components/ui`の`createUiKit()`が返す文字列・`components/StickyActionBar`・`components/SearchValue`・`components/SearchInput`のクラス組み立て）。UIコンポーネント自体の
+`format`・`supabase`・`components/ui`の`createUiKit()`が返す文字列・`components/StickyActionBar`・`components/SearchValue`・`components/SearchInput`・`components/FilterResetLink`のクラス組み立て）。UIコンポーネント自体の
 レンダリング・見た目のスナップショットは対象外（`UserMenu`の外側クリック等のインタラクションは
 未着手。全体管理セッションのTODO.mdで管理、`TODO.md`参照）。
 
@@ -198,9 +198,26 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
   フォーカス時にaccentの枠とリングが付くこと・「×」で`onClear`が呼ばれ入力が空になることを確認済み。
   Vitestはクラス組み立て（`createUiKit`の`inputClass`との一致）・`onChange`が文字列を渡すこと・
   「×」の出し分けと`onClear`の呼び分けのみ（`tests/searchInput.test.ts`）。
+- `components/FilterResetLink`: 絞り込みを最初の状態に戻す、小さな下線つきのテキストリンク
+  （v3.14〜）。payment-appの「最初の絞り込みに戻す」の見た目（`text-xs text-slate-500 underline
+  hover:text-slate-700`、アイコンなし）を見本に、price-app（「検索条件クリア」「条件クリア」）・
+  receipt-app（「クリア」「検索条件クリア」）のリセットリンクもそろえるため共通化した。props:
+  `onClick`、`label`（省略時「最初の絞り込みに戻す」）、`className`（**追加分のみ**。既定のクラスは
+  置き換わらない）。**表示するか（既定の絞り込み状態でないときだけ出す、など）は呼び出し側が決める**。
+  何をリセットするか（検索語・各フィルター・ページ）も`onClick`で呼び出し側が行う。フィルター行の
+  中に置くか、`<div>`で包んで独立した行にするかも呼び出し側が決める。`"use client"`付き。
+  ```tsx
+  {!isDefaultFilter && (
+    <div>
+      <FilterResetLink onClick={() => { setQuery(""); setStatuses(new Set(OPEN_STATUSES)); resetPage(); }} />
+    </div>
+  )}
+  ```
+  Vitestは既定の文言・`label`の上書き・`onClick`の呼び出し・クラスが追加のみであることを検証
+  （`tests/filterResetLink.test.ts`）。
 
 **Tailwindを使うUI系モジュール（`components/UserMenu`・`components/ui`・`components/SelectCell`・
-`components/StickyActionBar`・`components/SearchValue`・`components/SearchInput`）の注意**:
+`components/StickyActionBar`・`components/SearchValue`・`components/SearchInput`・`components/FilterResetLink`）の注意**:
 各アプリの`tailwind.config.js`の`content`に、このパッケージのソースを含めること
 （例: `"./node_modules/admin-portal-shared/src/**/*.{ts,tsx}"`）。含めないと、アプリ側の
 コードに同じクラス名が偶然残っていない限りTailwindがこれらのクラスを生成せず、見た目が
@@ -224,7 +241,7 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.13"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.14"
 }
 ```
 
@@ -284,7 +301,7 @@ export const config = {
 
 - **破壊的変更**: メジャータグを切る（`v1` → `v2` → `v3`）
 - **非破壊的変更**（新規exportの追加・バグ修正・ドキュメント修正など）: マイナータグを切る
-  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9` → `v3.10` → `v3.11` → `v3.12` → `v3.13`）。既存のメジャータグは動かさない（他アプリが意図せず
+  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9` → `v3.10` → `v3.11` → `v3.12` → `v3.13` → `v3.14`）。既存のメジャータグは動かさない（他アプリが意図せず
   巻き込まれないように）
 
 最新のタグは `git tag -l --sort=-creatordate` で確認するか、`CHANGELOG.md` を参照。

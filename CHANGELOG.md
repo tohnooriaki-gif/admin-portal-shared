@@ -258,3 +258,11 @@ payment-app担当からの依頼（管理セッション経由）。payment-app�
 - **`v3.13`** `createUiKit`のアクセントに`"neutral"`を追加（フォーカスの枠`slate-400`・リング`slate-100`、ボタン`slate-700`）。`SearchInput`が入力欄のクラスを`createUiKit`から取るために必要だった。StickyActionBar・SearchValueの`neutral`と対応。型の拡張のみで既存のindigo/emerald/amberの動作は変わらない（非破壊的）
 - `tests/searchInput.test.ts`（8テスト）・`tests/ui.test.ts`にneutralを追加。入力欄のクラスが`createUiKit`の`inputClass`と一致すること、`onChange`が文字列を渡すこと、「×」の出し分け、`onClear`の有無での呼び分け、`className`が追加のみであることを検証。カバレッジ100%を維持
 - 実ブラウザでの検証: パディングが`inputClassBase`の`px-3`ではなく`pl-9 pr-9`（36px）になること（Tailwindはpx→pr/plの順でCSSを出すため後者が勝つ）／入力が空なら「×」が無く虫眼鏡のみ／入力すると「×」が入力欄の内側の右端（右端から8px）に出ること／フォーカス時にamberの枠とリングが付くこと／「×」で`onClear`が呼ばれ入力が空になり「×」が消えること。「×」は22×22pxでクリック位置の最前面にある（payment-appと同じ大きさ）
+
+### 絞り込みのリセットリンクの共通化（v3.14）
+
+同日の追加のユーザー指示（検索欄に続けて「絞り込みのリセット用のリンクも、payment-appにそろえる」）。v3.13は既にタグを切ってpush済みでタグは動かさない慣例のため、別のマイナータグ（v3.14）にした。
+
+#### 🆕 追加
+- **`v3.14`** `components/FilterResetLink`を新設。payment-appの「最初の絞り込みに戻す」（`text-xs text-slate-500 underline hover:text-slate-700`、アイコンなし）の見た目。props: `onClick`、`label`（既定「最初の絞り込みに戻す」）、`className`（**追加のみ**）。表示するか・何をリセットするか・独立した行にするかは呼び出し側が決める。`"use client"`付き。price-appの「検索条件クリア」（RotateCcwアイコン付き・hover:text-indigo-600）、receipt-appの「クリア」とは見た目が変わる（ユーザー指示で、payment-appにそろえる）
+- `tests/filterResetLink.test.ts`（4テスト）。カバレッジ100%を維持

@@ -18,7 +18,8 @@
     "./components/SelectCell": "./src/components/SelectCell.tsx",
     "./components/StickyActionBar": "./src/components/StickyActionBar.tsx",
     "./components/SearchValue": "./src/components/SearchValue.tsx",
-    "./components/SearchInput": "./src/components/SearchInput.tsx"
+    "./components/SearchInput": "./src/components/SearchInput.tsx",
+    "./components/FilterResetLink": "./src/components/FilterResetLink.tsx"
   },
   "scripts": {
     "test": "vitest run",
