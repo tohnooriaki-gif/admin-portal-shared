@@ -50,7 +50,7 @@ export function Field({
   );
 }
 
-type Accent = "indigo" | "emerald" | "amber";
+type Accent = "neutral" | "indigo" | "emerald" | "amber";
 
 const ACCENT_CLASSES: Record<Accent, { button: string; buttonHover: string; focusBorder: string; focusRing: string }> = {
   indigo: {
@@ -70,6 +70,13 @@ const ACCENT_CLASSES: Record<Accent, { button: string; buttonHover: string; focu
     buttonHover: "hover:bg-amber-700",
     focusBorder: "focus:border-amber-400",
     focusRing: "focus:ring-amber-100",
+  },
+  // アプリのアクセントに依存しない中立色（`SearchInput`等の既定。StickyActionBar・SearchValueの`neutral`と対応）
+  neutral: {
+    button: "bg-slate-700",
+    buttonHover: "hover:bg-slate-800",
+    focusBorder: "focus:border-slate-400",
+    focusRing: "focus:ring-slate-100",
   },
 };
 

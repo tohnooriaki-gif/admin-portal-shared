@@ -21,6 +21,7 @@ admin-portal-shared（統合ポータル配下の各アプリが共有する処�
 - [📅 2026-10-02（金）](#2026-10-02金)
 - [📅 2026-10-06（火）](#2026-10-06火)
 - [📅 2026-10-07（水）](#2026-10-07水)
+- [📅 2026-10-08（木）](#2026-10-08木)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -243,3 +244,17 @@ payment-app担当からの依頼（管理セッション経由）。payment-app�
 
 ### 📝 その他
 - receipt-appの品名ボタンは、空のときに「-」を表示し`disabled`にしている。共通版は空なら`null`のため、receipt-app側で空のときの表示（「-」）を自前で出す必要がある（READMEに明記）
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 📅 2026-10-08（木）
+
+**概要：一覧の検索欄（虫眼鏡＋「×」で検索語を消す）を共通化（`components/SearchInput`、v3.13）**
+
+管理セッション経由のユーザー指示（「入金管理に全て合わせて。他画面でも同様の処理があったら合わせて。共通化できるならお願い」）。検索欄の「×」が、payment-appには入力欄の右端の内側にあり、price-app・receipt-appには無かった。payment-app（請求一覧`InvoiceExplorer.tsx`・操作履歴`ActionHistoryList.tsx`、2か所とも同じ作り）を見本に共通化した。
+
+### 🆕 追加
+- **`v3.13`** `components/SearchInput`を新設。左に虫眼鏡、入力があるときだけ右端の内側に「×」（title・aria-labelは「検索語を消す」）。props: `value`、`onChange(value: string)`（文字列を直接渡す）、`placeholder`、`ariaLabel`（必須）、`accent`（`neutral`[既定]/`indigo`/`emerald`/`amber`、フォーカス時の枠・リングの色）、`onClear`（任意、既定は`onChange("")`。指定すると`onChange("")`は呼ばれない）、`className`（外側の`<div>`への**追加のみ**、`relative`は置き換わらない）。入力欄のクラスは`createUiKit(accent).inputClass`と同一（＋`pl-9 pr-9`）。検索の中身は共通化せず呼び出し側が持つ。`lucide-react`（`Search`・`X`）に依存（`UserMenu`と同じpeerDependency）。`"use client"`付き
+- **`v3.13`** `createUiKit`のアクセントに`"neutral"`を追加（フォーカスの枠`slate-400`・リング`slate-100`、ボタン`slate-700`）。`SearchInput`が入力欄のクラスを`createUiKit`から取るために必要だった。StickyActionBar・SearchValueの`neutral`と対応。型の拡張のみで既存のindigo/emerald/amberの動作は変わらない（非破壊的）
+- `tests/searchInput.test.ts`（8テスト）・`tests/ui.test.ts`にneutralを追加。入力欄のクラスが`createUiKit`の`inputClass`と一致すること、`onChange`が文字列を渡すこと、「×」の出し分け、`onClear`の有無での呼び分け、`className`が追加のみであることを検証。カバレッジ100%を維持
+- 実ブラウザでの検証: パディングが`inputClassBase`の`px-3`ではなく`pl-9 pr-9`（36px）になること（Tailwindはpx→pr/plの順でCSSを出すため後者が勝つ）／入力が空なら「×」が無く虫眼鏡のみ／入力すると「×」が入力欄の内側の右端（右端から8px）に出ること／フォーカス時にamberの枠とリングが付くこと／「×」で`onClear`が呼ばれ入力が空になり「×」が消えること。「×」は22×22pxでクリック位置の最前面にある（payment-appと同じ大きさ）

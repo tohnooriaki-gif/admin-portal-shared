@@ -13,7 +13,7 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
 
 `tests/`配下にVitest（price-appと同一）でユニットテストがある。対象は`src/`配下の**純粋なロジック
 のみ**（`session`・`sessionHeaders`・`basePath`・`loginRedirect`・`middlewareMatcher`・`db`・
-`format`・`supabase`・`components/ui`の`createUiKit()`が返す文字列・`components/StickyActionBar`・`components/SearchValue`のクラス組み立て）。UIコンポーネント自体の
+`format`・`supabase`・`components/ui`の`createUiKit()`が返す文字列・`components/StickyActionBar`・`components/SearchValue`・`components/SearchInput`のクラス組み立て）。UIコンポーネント自体の
 レンダリング・見た目のスナップショットは対象外（`UserMenu`の外側クリック等のインタラクションは
 未着手。全体管理セッションのTODO.mdで管理、`TODO.md`参照）。
 
@@ -71,7 +71,7 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
 - `components/ui`: UI基本部品。`Card` / `SecondaryButton` / `Field`はそのままexport。
   `PrimaryButton` / `inputClass` / `selectClass`（と、幅指定を含まない変種の
   `inputClassBase` / `selectClassBase`、v3.3〜）はアクセントカラー（price-app: indigo、
-  receipt-app: emerald、payment-app: amber（v3.7〜））だけが違ったため、`createUiKit(accent)`で生成する形にした。
+  receipt-app: emerald、payment-app: amber（v3.7〜））だけが違ったため（v3.13〜は、アプリのアクセントに依存しない中立色`"neutral"`も指定できる）、`createUiKit(accent)`で生成する形にした。
   幅を自前で指定したい入力欄（`w-auto`・`w-28`・`flex-1`等）は`inputClassBase`を使うこと
   （`${inputClass} w-auto`は、Tailwindの生成順で`w-full`が後勝ちして効かず全幅になる）。
   ボタン類は`whitespace-nowrap`付き（v3.3〜）
@@ -166,9 +166,41 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
   ```
   ホバーの色・点線・クリックが行へ伝わらないこと・`truncate`の挙動は実ブラウザで検証済み。Vitestは
   クラス組み立て・`title`・`onSearch`の呼び出し・`stopPropagation`の有無のみ（`tests/searchValue.test.ts`）。
+- `components/SearchInput`: 一覧の検索欄（v3.13〜）。左に虫眼鏡、入力があるときだけ右端の内側に
+  「×」（検索語を消す）を出す。payment-app（請求一覧・操作履歴）の実装を見本に、「×」が無かった
+  price-app・receipt-appの検索欄も同じ見た目・操作にそろえるため共通化した。props: `value`、
+  `onChange(value: string)`（イベントではなく**文字列を直接**渡す）、`placeholder`、`ariaLabel`
+  （必須）、`accent`（`"neutral"`[既定]/`"indigo"`/`"emerald"`/`"amber"`。フォーカス時の枠・リングの
+  色）、`onClear`（任意。「×」を押したときの処理。既定は`onChange("")`。ページのリセット等も
+  要るときに指定。指定すると`onChange("")`は呼ばれない）、`className`（**外側の`<div>`への追加分
+  のみ**。`relative`は置き換わらない）。検索の中身（絞り込み・ページのリセットなど）は共通化せず
+  呼び出し側が持つ。入力欄のクラスは`createUiKit(accent).inputClass`と同一（＋左右の余白
+  `pl-9 pr-9`）なので、同じ画面の他の入力欄と見た目がそろう。「×」のtitle・aria-labelは
+  「検索語を消す」。入力欄は`type="text"`のまま（`type="search"`にするとブラウザが独自の「×」を
+  足し二重になる）。**注意**: 横並びの行で幅を確保するときは`className="min-w-[14rem] flex-1"`の
+  ように`flex-1`と`min-w-*`を付けること（付けないと入力欄が内容幅まで縮む）。`lucide-react`
+  （`Search`・`X`）に依存（`UserMenu`と同じpeerDependency）。`"use client"`付き。
+  ```tsx
+  <SearchInput
+    className="min-w-[14rem] flex-1"
+    accent="amber"
+    ariaLabel="請求を検索"
+    placeholder="コード・顧客名・伝票番号・備考で検索"
+    value={query}
+    onChange={(v) => { setQuery(v); resetPage(); }}
+    onClear={() => { setQuery(""); resetPage(); }}
+  />
+  ```
+  `onChange`の中でページをリセットしているなら、`onClear`も同じ処理にする（`onClear`を省略すると
+  「×」は`onChange("")`を呼ぶので、`onChange`側のリセットがそのまま効く。上の例は`onChange`に
+  リセットがあるため`onClear`は省略してもよい）。実ブラウザで、パディングが`px-3`ではなく
+  `pl-9 pr-9`（36px）になること・「×」が入力欄の右端の内側に出て入力が空なら出ないこと・
+  フォーカス時にaccentの枠とリングが付くこと・「×」で`onClear`が呼ばれ入力が空になることを確認済み。
+  Vitestはクラス組み立て（`createUiKit`の`inputClass`との一致）・`onChange`が文字列を渡すこと・
+  「×」の出し分けと`onClear`の呼び分けのみ（`tests/searchInput.test.ts`）。
 
 **Tailwindを使うUI系モジュール（`components/UserMenu`・`components/ui`・`components/SelectCell`・
-`components/StickyActionBar`・`components/SearchValue`）の注意**:
+`components/StickyActionBar`・`components/SearchValue`・`components/SearchInput`）の注意**:
 各アプリの`tailwind.config.js`の`content`に、このパッケージのソースを含めること
 （例: `"./node_modules/admin-portal-shared/src/**/*.{ts,tsx}"`）。含めないと、アプリ側の
 コードに同じクラス名が偶然残っていない限りTailwindがこれらのクラスを生成せず、見た目が
@@ -192,7 +224,7 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.12"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.13"
 }
 ```
 
@@ -252,7 +284,7 @@ export const config = {
 
 - **破壊的変更**: メジャータグを切る（`v1` → `v2` → `v3`）
 - **非破壊的変更**（新規exportの追加・バグ修正・ドキュメント修正など）: マイナータグを切る
-  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9` → `v3.10` → `v3.11` → `v3.12`）。既存のメジャータグは動かさない（他アプリが意図せず
+  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9` → `v3.10` → `v3.11` → `v3.12` → `v3.13`）。既存のメジャータグは動かさない（他アプリが意図せず
   巻き込まれないように）
 
 最新のタグは `git tag -l --sort=-creatordate` で確認するか、`CHANGELOG.md` を参照。
