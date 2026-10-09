@@ -13,7 +13,7 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
 
 `tests/`配下にVitest（price-appと同一）でユニットテストがある。対象は`src/`配下の**純粋なロジック
 のみ**（`session`・`sessionHeaders`・`basePath`・`loginRedirect`・`middlewareMatcher`・`db`・
-`format`・`supabase`・`components/ui`の`createUiKit()`が返す文字列・`components/StickyActionBar`・`components/SearchValue`・`components/SearchInput`・`components/FilterResetLink`のクラス組み立て）。UIコンポーネント自体の
+`format`・`supabase`・`portalUsers`（差し替えたfetchで）・`components/ui`の`createUiKit()`が返す文字列・`components/StickyActionBar`・`components/SearchValue`・`components/SearchInput`・`components/FilterResetLink`のクラス組み立て）。UIコンポーネント自体の
 レンダリング・見た目のスナップショットは対象外（`UserMenu`の外側クリック等のインタラクションは
 未着手。全体管理セッションのTODO.mdで管理、`TODO.md`参照）。
 
@@ -54,6 +54,46 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
   既存の呼び出し元は無改修で動く）。**注意**: 非publicスキーマをSupabase Data API経由で使うには、
   Supabase側の管理画面（Project Settings > API > Exposed schemas）にそのスキーマを追加登録する
   必要がある（このパッケージからは設定できない）。
+- `portalUsers`: ユーザーとロールの割当（`portal.users`）を読む共通処理（v3.16〜、アカウント一元化フェーズ3）。
+  権限マトリクス（ロールごとの機能のON/OFF）は各アプリに残り、ここでは扱わない。**サーバー専用**
+  （API Route・Server Componentなど。**Edgeのmiddlewareでは呼ばない**: Supabaseクライアントがwsに依存）。
+  - `resolvePortalUser(client, loginId)`: ログインID（JWTクレームの`sub`と同じ。大文字小文字は区別しない）から
+    現在のユーザー`{ id, loginId, name, role }`を引く。**存在しなければ`null`**（未登録・削除済み・形式が不正）。
+    `login_key`（= `lower(login_id)`の生成列）で照合し、`name`では照合しない（改名できるため）。ログインIDが
+    `portal.users`の形式（英数字・`.`・`_`・`-`、1〜32文字）でなければDBに問い合わせず`null`
+  - `listPortalUsers(client)`: 全ユーザーをログインID順で返す
+  - `PortalUsersError`: **DBエラー**（接続失敗・`portal`が公開されていない等）で投げる。`code`（PostgRESTのコード、
+    例: スキーマ未公開は`PGRST106`）と`cause`を持つ。**「存在しない」は`null`、「DBエラー」は例外**と区別できる。
+    拒否するかどうか（全拒否=fail-closed、503にする等）は呼び出し側が行う
+  - 毎回引く（キャッシュなし。JWTのスナップショットを信用しない）ので、ロール変更・削除が即時に反映される。
+    supabase-jsのGETの自動リトライ（障害時に最大約7秒待たされる）は無効にしてあり、失敗はすぐ例外になる
+  - **接続の渡し方**: 各アプリが既に持っているservice_roleのSupabaseクライアント（`createServiceClient`が返すもの。
+    既定のスキーマはprice・receipt・payment等のままでよい）を引数で渡す。このモジュールはURL・キーを受け取らず・
+    保持せず・環境変数も読まない（キーを扱う場所を`createServiceClient`だけに限る）。必ず`portal`スキーマを明示して
+    読むので、クライアントの既定スキーマのテーブルを誤って読むことはない。ブラウザ側（`window`がある環境）で
+    呼ばれたら実行時に例外にする。**Supabaseの「Exposed schemas」に`portal`の追加が必要**
+  - ユーザーの作成・更新・削除（と`user_history`の監査ログ）は、admin-portalの管理画面だけが使うためここには入れず、
+    admin-portal側に置く（書き込みの入口を1か所にする）。ロールの一覧（`PORTAL_ROLES`等）も、DBのCHECK制約と
+    各アプリの権限マトリクスが持つため、ここでは定義しない（`role`は`string`）
+  ```ts
+  import { createServiceClient } from "admin-portal-shared/supabase";
+  import { resolvePortalUser, PortalUsersError } from "admin-portal-shared/portalUsers";
+
+  const supabase = createServiceClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { schema: "price" });
+
+  // API Route / Server Component（verifySessionで得たclaims.subを渡す）
+  try {
+    const user = await resolvePortalUser(supabase, claims.sub);
+    if (!user) return deny(401); // 存在しない（削除済みなど）→ 拒否（判断は呼び出し側）
+    // user.role で権限マトリクスを引く。引けないロールも全拒否にする（fail-closed）
+  } catch (e) {
+    if (e instanceof PortalUsersError) return deny(503); // DBエラー → 拒否して503
+    throw e;
+  }
+  ```
+  Vitestは、実際のsupabase-jsクライアント＋差し替えたfetchで、送られるリクエスト（`Accept-Profile: portal`・
+  `login_key`のフィルター）、`null`と`PortalUsersError`の区別、形式が不正なログインID（ケルビン記号等）の拒否、
+  ブラウザ側での呼び出しの拒否を検証（`tests/portalUsers.test.ts`）。
 - `components/UserMenu`: ヘッダー右上のユーザーメニュー（`{ portalUrl, userName }`を受け取る）。
   「アプリ一覧へ戻る」「ログアウト」のドロップダウン。price-app/receipt-app双方で実装が完全に
   一致していたため共通化（v3〜）。v3.3で長い名前・メールアドレスへの耐性を追加（名前は
@@ -241,7 +281,7 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.15"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.16"
 }
 ```
 
@@ -301,7 +341,7 @@ export const config = {
 
 - **破壊的変更**: メジャータグを切る（`v1` → `v2` → `v3`）
 - **非破壊的変更**（新規exportの追加・バグ修正・ドキュメント修正など）: マイナータグを切る
-  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9` → `v3.10` → `v3.11` → `v3.12` → `v3.13` → `v3.14` → `v3.15`）。既存のメジャータグは動かさない（他アプリが意図せず
+  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9` → `v3.10` → `v3.11` → `v3.12` → `v3.13` → `v3.14` → `v3.15` → `v3.16`）。既存のメジャータグは動かさない（他アプリが意図せず
   巻き込まれないように）
 
 最新のタグは `git tag -l --sort=-creatordate` で確認するか、`CHANGELOG.md` を参照。

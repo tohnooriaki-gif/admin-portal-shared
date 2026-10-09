@@ -282,3 +282,16 @@ payment-app担当からの依頼（管理セッション経由）。payment-app�
 
 ### 🆕 追加
 - **`v3.15`** `tests/version.test.ts`（4テスト）: 上げ忘れの防止。(a)`package.json`の`version`が`CHANGELOG.md`の最新のタグ（`**`vX.Y`**`の最大のもの）に対応している (b)`package-lock.json`の`version`が同じ (c)READMEの使い方の例のタグ（`#vX.Y`）が最新のタグと同じ (d)`version`が`N.M.0`の形。gitやネットワークには触れず、コミット前（`npm test`）に検出できる。CHANGELOGにタグの項目を書き忘れた場合は検出できない
+
+### アカウント一元化（フェーズ3）の共通化: `portalUsers`（v3.16）
+
+管理セッション経由のユーザー承認済みの依頼。ユーザーとロールの割当だけを`portal.users`（同一Supabaseプロジェクトの`portal`スキーマ）に一元化する（権限マトリクスは各アプリに残す）。ロールの反映は「毎回引く」（JWTのスナップショットにしない）、全拒否（fail-closed）に統一、パスワード導入なし。段階は 共通化(v3.16) → 3a（SQLで`portal`スキーマ作成・`price.users`をコピー）→ 3b（admin-portalにユーザー管理画面、price-appの読み先を切替）→ 3c（各アプリの組み込み）。`portal.users`の列・SQLはadmin-portalの`docs/phase3-3a-sql.md`を参照した（`login_key`は`lower(login_id)`の生成列、`login_id`のCHECKは`^[A-Za-z0-9._-]{1,32}$`）。
+
+#### 🆕 追加
+- **`v3.16`** `portalUsers`モジュールを新設（`admin-portal-shared/portalUsers`）。`resolvePortalUser(client, loginId)`: ログインID（JWTの`sub`）から`{ id, loginId, name, role } | null`を返す。`login_key`で大文字小文字を区別せず1回の等価検索で照合し、`name`では照合しない。`listPortalUsers(client)`: 全ユーザー。**存在しなければ`null`、DBエラーは`PortalUsersError`（`code`・`cause`付き）を投げる**ので、呼び出し側が区別でき、拒否・503の判断は呼び出し側が行う
+- **接続は引数で渡す**: 各アプリが既に持つservice_roleのSupabaseクライアントを渡す形にした。URL・キーは受け取らず・保持せず・環境変数も読まない（キーを扱う場所を`createServiceClient`だけに限り、ブラウザ側のコードにキーが混ざる余地を作らない）。クライアントの既定スキーマに関わらず必ず`.schema("portal")`を明示する。ブラウザ側（`window`がある環境）で呼ばれたら実行時に例外。Supabaseの「Exposed schemas」に`portal`の追加が必要
+- ログインIDが`portal.users`の形式でなければ、DBに問い合わせず`null`（そのようなユーザーは存在し得ない）。特に、ケルビン記号（U+212A）は`toLowerCase()`でASCIIの"k"になり別ユーザーと一致してしまうため、照合の前に形式で弾く
+- supabase-jsのGETの自動リトライ（通信エラー・503で最大3回、1秒・2秒・4秒の待ち）は`.retry(false)`で無効にした。毎リクエストの認可の参照で、障害時に最大約7秒待たされないようにするため（失敗はすぐ`PortalUsersError`）
+- `tests/portalUsers.test.ts`（10テスト）: 実際のsupabase-jsクライアントとfetchの差し替えで、リクエスト（`Accept-Profile: portal`・`login_key`のフィルター・`order`）、`null`と`PortalUsersError`の区別（スキーマ未公開のPGRST106・500・通信失敗）、形式が不正なログインIDの拒否（問い合わせなし）、ブラウザ側での呼び出しの拒否を検証。カバレッジ100%を維持
+- ユーザーの作成・更新・削除と`user_history`の監査ログはadmin-portalの管理画面だけが使うため、共通部品には入れずadmin-portal側に置く（書き込みの入口を1か所にする）。ロールの一覧もDBのCHECK制約と各アプリの権限マトリクスが持つため定義しない（`role`は`string`）
+- **`version`を`3.16.0`に上げた**（v3.15からの運用）
