@@ -241,7 +241,7 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.14"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.15"
 }
 ```
 
@@ -301,7 +301,21 @@ export const config = {
 
 - **破壊的変更**: メジャータグを切る（`v1` → `v2` → `v3`）
 - **非破壊的変更**（新規exportの追加・バグ修正・ドキュメント修正など）: マイナータグを切る
-  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9` → `v3.10` → `v3.11` → `v3.12` → `v3.13` → `v3.14`）。既存のメジャータグは動かさない（他アプリが意図せず
+  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9` → `v3.10` → `v3.11` → `v3.12` → `v3.13` → `v3.14` → `v3.15`）。既存のメジャータグは動かさない（他アプリが意図せず
   巻き込まれないように）
 
 最新のタグは `git tag -l --sort=-creatordate` で確認するか、`CHANGELOG.md` を参照。
+
+### タグを切るときは `package.json` の `version` も上げる（v3.15〜）
+
+**タグを切るたびに、`package.json`（と`package-lock.json`の先頭2か所）の`version`を、タグに対応させて上げる**（タグ`vN.M` → `"N.M.0"`、メジャータグ`vN` → `"N.0.0"`。例: `v3.15` → `"3.15.0"`）。
+
+理由: 各アプリのNext.js（webpack）のビルドキャッシュは、`node_modules`内のパッケージを「`version`が同じなら中身も同じ」とみなす。タグを上げても`version`が同じ（以前は`0.1.0`のままだった）だと、Vercelのように前回の`.next/cache`を引き継ぐ環境で古いファイルのキャッシュが使われ、新しいファイルと食い違って本番で落ちる（2026-10-08、v3.13で既存の`ui.tsx`に`neutral`を足したため、古い`ui.tsx`と新しい`SearchInput.tsx`が食い違った）。過去のタグは動かさず、v3.15から運用する。
+
+手順（これまでの手順に、2番を足したもの）:
+1. コードを変更し、README・CHANGELOGを更新する（CHANGELOGの項目の先頭に`**`vX.Y`**`を書く。READMEの使い方の例のタグ`#vX.Y`も新しいタグにする）
+2. `package.json`と`package-lock.json`の`version`を`X.Y.0`にする
+3. `npx tsc --noEmit`と`npm test`を通す
+4. コミットして、`git tag vX.Y`、`git push origin main`・`git push origin vX.Y`
+
+**上げ忘れの防止**: `tests/version.test.ts`が、(a)`package.json`の`version`が`CHANGELOG.md`の最新のタグ（`**`vX.Y`**`の最大のもの）に対応していること、(b)`package-lock.json`の`version`が同じであること、(c)READMEの使い方の例のタグが最新のタグと同じであること、を確認する。CHANGELOGにタグの項目を書いたのに`version`を上げ忘れると、`npm test`が失敗してコミット前に気づける（gitやネットワークには触れない）。タグを切ってからではなく、コミット前に検出する仕組みで、CHANGELOGにタグの項目を書き忘れた場合は検出できない。

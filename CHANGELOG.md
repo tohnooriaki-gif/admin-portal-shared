@@ -22,6 +22,7 @@ admin-portal-shared（統合ポータル配下の各アプリが共有する処�
 - [📅 2026-10-06（火）](#2026-10-06火)
 - [📅 2026-10-07（水）](#2026-10-07水)
 - [📅 2026-10-08（木）](#2026-10-08木)
+- [📅 2026-10-09（金）](#2026-10-09金)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -266,3 +267,18 @@ payment-app担当からの依頼（管理セッション経由）。payment-app�
 #### 🆕 追加
 - **`v3.14`** `components/FilterResetLink`を新設。payment-appの「最初の絞り込みに戻す」（`text-xs text-slate-500 underline hover:text-slate-700`、アイコンなし）の見た目。props: `onClick`、`label`（既定「最初の絞り込みに戻す」）、`className`（**追加のみ**）。表示するか・何をリセットするか・独立した行にするかは呼び出し側が決める。`"use client"`付き。price-appの「検索条件クリア」（RotateCcwアイコン付き・hover:text-indigo-600）、receipt-appの「クリア」とは見た目が変わる（ユーザー指示で、payment-appにそろえる）
 - `tests/filterResetLink.test.ts`（4テスト）。カバレッジ100%を維持
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 📅 2026-10-09（金）
+
+**概要：タグを切るたびに`package.json`の`version`も上げる運用を開始（v3.15、本番障害の再発防止）**
+
+管理セッション経由のユーザー承認済みの依頼。2026-10-08、payment-appがv3.14に追従した直後に本番の請求一覧が「Application error」（`Cannot read properties of undefined (reading focusBorder)`）で白画面になった。原因はビルドキャッシュ: Next.js（webpack）のキャッシュは`node_modules`内のパッケージを「`version`が同じなら中身も同じ」とみなすが、このパッケージはタグを上げても`version`が`0.1.0`のままだった。v3.13で既存の`ui.tsx`に`neutral`を足したため、Vercelが引き継いだ古い`ui.tsx`のキャッシュと、新しい`SearchInput.tsx`（`createUiKit("neutral")`を呼ぶ）が食い違って落ちた（payment-appで再現・確認済み。`.next`を消すと出ない）。payment-app側は`next.config.js`でキャッシュの版に共通部品のコミットを混ぜる対策済み（`61bdafe`）。
+
+### 🔄 変更
+- **`v3.15`** `package.json`・`package-lock.json`の`version`を`0.1.0`から`3.15.0`に変更。今後、タグ`vN.M`を切るときは`version`を`N.M.0`に上げる（メジャータグ`vN`は`N.0.0`）。過去のタグは動かさない。API・コードの動作の変更なし
+- READMEの「バージョン管理」に、この運用・理由・手順を追記
+
+### 🆕 追加
+- **`v3.15`** `tests/version.test.ts`（4テスト）: 上げ忘れの防止。(a)`package.json`の`version`が`CHANGELOG.md`の最新のタグ（`**`vX.Y`**`の最大のもの）に対応している (b)`package-lock.json`の`version`が同じ (c)READMEの使い方の例のタグ（`#vX.Y`）が最新のタグと同じ (d)`version`が`N.M.0`の形。gitやネットワークには触れず、コミット前（`npm test`）に検出できる。CHANGELOGにタグの項目を書き忘れた場合は検出できない

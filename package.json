@@ -1,6 +1,6 @@
 {
   "name": "admin-portal-shared",
-  "version": "0.1.0",
+  "version": "3.15.0",
   "private": true,
   "license": "UNLICENSED",
   "description": "admin-portal（Multi-Zone shell）配下の各アプリ（price-app / receipt-app / 今後追加分）が共有する処理全般のユーティリティ（認証まわりはその一部）",
