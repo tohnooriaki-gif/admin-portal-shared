@@ -13,7 +13,7 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
 
 `tests/`配下にVitest（price-appと同一）でユニットテストがある。対象は`src/`配下の**純粋なロジック
 のみ**（`session`・`sessionHeaders`・`basePath`・`loginRedirect`・`middlewareMatcher`・`db`・
-`format`・`supabase`・`portalUsers`（差し替えたfetchで）・`search`・`components/ui`の`createUiKit()`が返す文字列・`components/StickyActionBar`・`components/SearchValue`・`components/SearchInput`・`components/FilterResetLink`のクラス組み立て）。UIコンポーネント自体の
+`format`・`supabase`・`portalUsers`・`authorize`（差し替えたfetchで）・`search`・`components/ui`の`createUiKit()`が返す文字列・`components/StickyActionBar`・`components/SearchValue`・`components/SearchInput`・`components/FilterResetLink`のクラス組み立て）。UIコンポーネント自体の
 レンダリング・見た目のスナップショットは対象外（`UserMenu`の外側クリック等のインタラクションは
 未着手。全体管理セッションのTODO.mdで管理、`TODO.md`参照）。
 
@@ -73,8 +73,8 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
     読むので、クライアントの既定スキーマのテーブルを誤って読むことはない。ブラウザ側（`window`がある環境）で
     呼ばれたら実行時に例外にする。**Supabaseの「Exposed schemas」に`portal`の追加が必要**
   - ユーザーの作成・更新・削除（と`user_history`の監査ログ）は、admin-portalの管理画面だけが使うためここには入れず、
-    admin-portal側に置く（書き込みの入口を1か所にする）。ロールの一覧（`PORTAL_ROLES`等）も、DBのCHECK制約と
-    各アプリの権限マトリクスが持つため、ここでは定義しない（`role`は`string`）
+    admin-portal側に置く（書き込みの入口を1か所にする）。`PortalUser.role`は`string`のまま。ロールの3値の定義と
+    書き込み可否は、v3.20の`authorize`が持つ
   ```ts
   import { createServiceClient } from "admin-portal-shared/supabase";
   import { resolvePortalUser, PortalUsersError } from "admin-portal-shared/portalUsers";
@@ -94,6 +94,61 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
   Vitestは、実際のsupabase-jsクライアント＋差し替えたfetchで、送られるリクエスト（`Accept-Profile: portal`・
   `login_key`のフィルター）、`null`と`PortalUsersError`の区別、形式が不正なログインID（ケルビン記号等）の拒否、
   ブラウザ側での呼び出しの拒否を検証（`tests/portalUsers.test.ts`）。
+- `authorize`: 全アプリ共通の「毎回引く」認可（v3.20〜、アカウント一元化フェーズ3の3c）。リクエストごとに`portal.users`を
+  引き（キャッシュなし。削除・ロール変更が即時に反映される）、結果を共通の形で返す。**すべて全拒否（fail-closed）**。
+  サーバー専用（API Route・Server Component）。**Edgeのmiddlewareでは呼ばない**。ブラウザ側で呼ばれたら実行時に例外。
+  リトライなし。**JWTの`role`クレームは参照しない**（ロールは常に`portal.users`の現在の値）。`verifySession`は各アプリのまま行い、
+  得られた`sub`を渡す。内部で`resolvePortalUser`（v3.16）を再利用する
+  - `authorizeActor(client, loginId)`: ユーザーの存在とロール（3値）を確認する。読み取りの入口用。`loginId`は`claims.sub`
+  - `authorizeWrite(client, loginId)`: 上に加えて、**「閲覧のみ」を書き込み不可として拒否**する。書き込み（編集・取込・削除など）の
+    入口用。どのAPIが書き込みかの分類は各アプリが決める（CSV出力のような読み取りは`authorizeActor`）
+  - 戻り値は`{ ok: true, user: { id, loginId, name, role } }`か`{ ok: false, reason, status, message }`。`user.role`は
+    `PortalRole`（3値）であることが保証される。`authFailureBody(result)`で`{ error, code }`のJSON本文にでき、
+    `NextResponse.json(authFailureBody(r), { status: r.status })`のように使う（共通部品はNext.jsに依存しない）
+  - 拒否の種類（`reason`）とHTTPステータス:
+
+    | reason | status | 場合 |
+    |---|---|---|
+    | `unauthenticated` | 401 | `loginId`が無い（`null`・`undefined`・空文字。セッションが無効） |
+    | `unregistered` | 401 | `portal.users`に無い（削除済み・ログインIDの形式が不正を含む）。**ログアウト扱い**（ページは呼び出し側がログアウトへ遷移） |
+    | `unavailable` | 503 | DBエラー（`PortalUsersError`: 接続失敗・`portal`スキーマが公開されていない等） |
+    | `invalid_role` | 403 | ロールが3値以外・空 |
+    | `read_only` | 403 | `authorizeWrite`だけ。ロールが「閲覧のみ」 |
+  - **利用者向けのメッセージは`AUTH_FAILURES`（`status`と`message`）の1か所**にまとめてある。文言を変えるときはここだけ
+    （ユーザーが後で確認する予定）
+  - **ロール**: `PORTAL_ROLES`（「管理者」「スタッフ」「閲覧のみ」。DBのCHECK制約と同じ）、`PortalRole`、`isPortalRole(x)`、
+    `canWrite(role)`（管理者・スタッフは可、閲覧のみ・不明・空・`null`・`undefined`は不可）。**ロールを追加するときは、3か所を直すこと**:
+    (1)DBの`portal.users`のCHECK制約（`users_role_known`） (2)この定数（`PORTAL_ROLES`・`canWrite`） (3)各アプリの権限マトリクス
+  - **fail-open だった所が拒否になる**: 以前は、アプリによって「DBエラーでロールを引けなければ全許可」「未知のロール・ロールが空なら
+    全許可」「ユーザー表が空なら既定のゲスト（管理者）で全許可」「JWTのロールを最大90日そのまま信頼（削除・ロール変更が反映されない）」
+    「ユーザー・権限の仕組みが無い」などの違いがあった。この関数を使うと、すべて拒否（DBエラーは503、ロール不明は403、
+    ユーザー不在は401）に統一される
+  - **前提: `portal.users`に管理者が最低1人いること**（現在は管理者3人）。ユーザー表が空・該当者なしだと、全員が`unregistered`（401）で
+    締め出される（ゲストの代替は無い）。ローカル開発・テスト環境に`portal`スキーマが無いと、全リクエストが`unavailable`（503）になる
+    （迂回の仕組みは入れていない。テストは共通部品をスタブ・モックする）
+  - **アプリ側の注意**: **「閲覧のみ」の書き込み不可は、各アプリの権限マトリクスより優先する**（`authorizeWrite`が先に拒否する）。
+    price-app・payment-appでは、権限設定の画面で閲覧のみに書き込み系の権限を設定できても無効になる。この矛盾の扱い
+    （画面で、閲覧のみの書き込み系をロックするなど）は各アプリで決める。アプリ固有の細かい権限は、これまでどおりマトリクスで
+    重ねる（ロールは`authorizeWrite`の結果の`user.role`で引く）。同一リクエスト内の重複（layout・page・APIなど）は、各アプリで
+    Reactの`cache()`で包めば1クエリに減らせる（共通部品はフレームワーク非依存のため入れていない）
+  ```ts
+  import { createServiceClient } from "admin-portal-shared/supabase";
+  import { authorizeActor, authorizeWrite, authFailureBody } from "admin-portal-shared/authorize";
+
+  const supabase = createServiceClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { schema: "receipt" });
+
+  // 書き込みAPIの入口（receipt-app・price-app・payment-app共通）
+  const claims = await verifySession(token); // 各アプリのまま。無効なら401
+  const auth = await authorizeWrite(supabase, claims?.sub);
+  if (!auth.ok) return NextResponse.json(authFailureBody(auth), { status: auth.status });
+  // price-app・payment-app: ここに、アプリごとの権限マトリクス（auth.user.role で引く）を重ねる
+
+  // 読み取りAPI・ページ: 存在確認とロールの確認だけ
+  const read = await authorizeActor(supabase, claims?.sub);
+  ```
+  Vitestは、実際のsupabase-jsクライアント＋差し替えたfetchで、未登録・DBエラー（500・PGRST106・通信失敗）・ロール不明（空・表記違い・
+  null）・閲覧のみ・大文字小文字の違うログインID・毎回引くこと・ロール変更の即時反映・想定外の例外の再throw・ブラウザ側での呼び出しの
+  拒否を検証（`tests/authorize.test.ts`）。
 - `search`: 検索語・検索対象の正規化と、スペース区切りAND検索のマッチング（v3.17〜）。receipt-appの
   `lib/search.ts`を**挙動を変えずに**移したもの（全アプリの検索のひらがな・カタカナ対応の共通化）。DOM・
   Next.jsに依存しない純粋関数で、サーバー側でもクライアント側でも使える。
@@ -317,7 +372,7 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.19"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.20"
 }
 ```
 
@@ -391,7 +446,7 @@ export const config = {
 
 - **破壊的変更**: メジャータグを切る（`v1` → `v2` → `v3`）
 - **非破壊的変更**（新規exportの追加・バグ修正・ドキュメント修正など）: マイナータグを切る
-  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9` → `v3.10` → `v3.11` → `v3.12` → `v3.13` → `v3.14` → `v3.15` → `v3.16` → `v3.17` → `v3.18` → `v3.19`）。既存のメジャータグは動かさない（他アプリが意図せず
+  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9` → `v3.10` → `v3.11` → `v3.12` → `v3.13` → `v3.14` → `v3.15` → `v3.16` → `v3.17` → `v3.18` → `v3.19` → `v3.20`）。既存のメジャータグは動かさない（他アプリが意図せず
   巻き込まれないように）
 
 最新のタグは `git tag -l --sort=-creatordate` で確認するか、`CHANGELOG.md` を参照。

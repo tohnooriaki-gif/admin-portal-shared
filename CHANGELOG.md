@@ -337,3 +337,15 @@ v3.18の本番確認で見つかった不具合。payment-appの入金登録の�
 - **`v3.19`** `normalizeForSearch`で、バックスラッシュ（U+005C）を「¥」（U+00A5）にそろえる（NFKC・小文字化・ひらがな→カタカナの後に`.replace`を1つ足しただけ）。全角「＼」（U+FF3C）はNFKCでバックスラッシュになってから、全角「￥」（U+FFE5）はNFKCで「¥」になるので、「¥」「￥」「バックスラッシュ」「＼」はすべて同じ文字になる。`stripForMatch`・`matchesQuery`・`matchesFields`・`buildSearchText`はすべて`normalizeForSearch`を通るため、この1か所の変更で、検索語・検索対象の両方に効く。**バックスラッシュを含まない文字列の結果は変わらない**。正規化は冪等のまま（`buildSearchText`の結果を`matchesQuery`に渡せる前提）
 - `tests/search.test.ts`に9テストを追加（計45。**v3.17・v3.18のテストは変えていない**）: 4つの文字が相互に一致（検索語と対象のすべての組み合わせ）／`バックスラッシュ23,507`が「¥23,507」「￥23,507」「＼23,507」の項目に一致／記号の無い「23,507」はどの記号付きにも一致／記号付きで検索すると記号の無い項目には一致しない（従来の「¥」と同じ）／`matchesFields`・`buildSearchText`・`stripForMatch`でも同様／冪等／バックスラッシュを含まない既存の検索の結果が変わらない。カバレッジ100%を維持
 - **`version`を`3.19.0`に上げた**
+
+### 全アプリ共通の「毎回引く」認可 `authorize`（v3.20、3c）
+
+管理セッション経由のユーザー判断（2026-10-16）: ユーザー・ロールの扱いはアプリごとに違っていた（price-app=毎回`portal.users`を引くがDBエラー・未知のロール・ユーザー表が空のとき全許可=fail-open／payment-app=JWTのロールを最大90日そのまま信頼（削除・ロール変更が反映されない）／receipt-app=ユーザー・権限なし）。**全てのシステムで同じ仕様**にするため、共通関数を追加した。設計案は管理セッションの確認済み（メッセージ文言は1か所の定数にまとめる・ロール定数を共通部品に持つことを了承）。
+
+#### 🆕 追加
+- **`v3.20`** `authorize`モジュールを新設（`admin-portal-shared/authorize`）。`authorizeActor(client, loginId)`（存在とロール3値の確認）・`authorizeWrite(client, loginId)`（加えて「閲覧のみ」を書き込み不可として拒否）・`authFailureBody(result)`（`{ error, code }`の本文）。結果は`{ ok: true, user }`か`{ ok: false, reason, status, message }`。**すべて全拒否（fail-closed）**: `unauthenticated`（401）・`unregistered`（401、ログアウト扱い）・`unavailable`（503、DBエラー）・`invalid_role`（403、ロールが3値以外・空）・`read_only`（403）。`resolvePortalUser`（v3.16）を再利用し、毎回引く（キャッシュなし）・リトライなし・サーバー専用（ブラウザ側では実行時に例外。503に丸めない）・JWTの`role`クレームは参照しない。`PortalUsersError`以外の想定外の例外は握りつぶさず再throwする
+- **`v3.20`** `PORTAL_ROLES`（「管理者」「スタッフ」「閲覧のみ」）・`PortalRole`・`isPortalRole`・`canWrite(role)`（管理者・スタッフは可。閲覧のみ・不明・空・null・undefinedは不可）。v3.16の「ロールの一覧は定義しない」を改め、3値チェックが共通仕様になったため共通部品が持つ（DBのCHECK制約と重複するので、**ロール追加は、DBのCHECK・この定数・各アプリのマトリクスの3か所**とREADMEに明記）
+- **`v3.20`** 利用者向けのメッセージと`status`は`AUTH_FAILURES`の1か所に集約（文言を後から変えやすくする。ユーザーが後で確認する予定）
+- `tests/authorize.test.ts`（25テスト）: 実際のsupabase-jsクライアント＋差し替えたfetchで、3ロールのok／未登録・DBエラー（500・PGRST106・通信失敗。リトライせず即時）・ロール不明（空・表記違い・空白付き・null・数値）／閲覧のみ（authorizeActorはok、authorizeWriteはread_only）／大文字小文字の違うログインID／`loginId`が無い・形式が不正（DBを引かない）／毎回引く（キャッシュなし）・ロール変更・削除の即時反映／想定外の例外の再throw／ブラウザ側での呼び出しの拒否／`canWrite`・`isPortalRole`の表。カバレッジ100%を維持
+- READMEに、**「閲覧のみ」の書き込み不可は各アプリの権限マトリクスより優先する**（マトリクスで閲覧のみに書き込み系の権限を設定できても無効。画面での扱いは各アプリで決める）、**fail-openだった所が拒否になる**、**`portal.users`に管理者が最低1人いる前提**（現在は管理者3人。空だと全員401）、ローカル開発・テスト環境に`portal`スキーマが無いと503、Reactの`cache()`による重複削減を明記
+- **`version`を`3.20.0`に上げた**
