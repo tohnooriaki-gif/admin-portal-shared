@@ -327,6 +327,20 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
   実行すると、`package.json`側の`git+https://`表記が`git+ssh://`の短縮形式に自動で
   書き換わってしまうことを確認済み。手動で書き戻す必要がある）
 
+**タグを上げて追従する手順と、`package-lock.json`の確認**（price-app・payment-appで実際に
+起きた事象: `package.json`のタグだけ書き換えて引数無しの`npm install`を実行しても、
+`package-lock.json`の`admin-portal-shared`が古いコミットのまま変わらないことがある）:
+1. `package.json`の`admin-portal-shared`のタグを新しいもの（例: `#v3.18`）に書き換える
+2. **`package-lock.json`の`admin-portal-shared`の項目を消す**（`"node_modules/admin-portal-shared"`の
+   ブロックと、ルートの`packages[""].dependencies`の`admin-portal-shared`の行。lockを残したまま
+   だと、npmが「すでに満たしている」と判断して古いコミットのままにすることがある）
+3. 引数無しの`npm install`を実行する（`npm install admin-portal-shared@...`の単体指定は使わない）
+4. **追従後に確認する**: `package-lock.json`の`node_modules/admin-portal-shared`の`resolved`の
+   `#`以降（コミット）が、新しいタグのコミットになっていること、`version`が新しいタグに対応
+   していること（v3.15〜はタグ`vN.M`→`N.M.0`）。タグのコミットは
+   `git ls-remote https://github.com/tohnooriaki-gif/admin-portal-shared.git vN.M`で確認できる。
+   一致しなければ、2からやり直す
+
 `next.config.js`:
 ```js
 module.exports = {

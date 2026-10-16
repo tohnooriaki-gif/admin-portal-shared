@@ -323,3 +323,8 @@ payment-app担当からの依頼（管理セッション経由）。payment-app�
 - `tests/search.test.ts`に13テストを追加（計36）: 境界をまたぐ偽の一致が出ないこと（「ウマ」「カレー」で「マカ」は不一致）／別々の項目に語が分かれても一致（AND）／null・undefined・空文字・数値（0・負数・小数・NaN）／空クエリ・undefined・null／ひらがな↔カタカナ・全角↔半角・半角カナ／**項目が1つのとき`matchesQuery`と同じ結果になること**（クエリの扱いが食い違わない）／`buildSearchText`の結果を`matchesQuery`に渡せること。カバレッジ100%を維持
 - READMEに規則を明記: 「複数項目を対象にするときは`matchesFields`を使う。文字列を自前で空白連結しない」
 - **`version`を`3.18.0`に上げた**
+
+### 追従手順に`package-lock.json`の確認を追記
+
+#### 📝 その他
+- **（タグ管理対象外）** READMEの「使い方（各アプリ側）」に、タグを上げて追従する手順と`package-lock.json`の確認を追記（管理セッション経由の依頼）。price-app・payment-appで、`package.json`のタグを書き換えて引数無しの`npm install`を実行しても、`package-lock.json`の`admin-portal-shared`が古いコミットのまま変わらない事象が出たため（price-appはv3.16、payment-appはv3.15のまま）。対処: ロックファイルの`admin-portal-shared`の項目を消してから`npm install`をやり直す／追従後に、lockの`resolved`が新しいタグのコミットになっているか（`git ls-remote`で確認）と`version`を確認する。コード変更なし、タグなし
