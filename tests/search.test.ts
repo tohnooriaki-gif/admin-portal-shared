@@ -246,3 +246,73 @@ describe("matchesFields（v3.18）", () => {
     }
   });
 });
+
+describe("バックスラッシュと円記号のそろえ（v3.19）", () => {
+  // 日本語キーボードの「¥」キーは、多くの環境でバックスラッシュ（U+005C）を入力する
+  const BS = String.fromCharCode(0x5c); // バックスラッシュ
+  const YEN = String.fromCharCode(0xa5); // 「¥」
+  const FULL_YEN = String.fromCharCode(0xffe5); // 全角「￥」
+  const FULL_BS = String.fromCharCode(0xff3c); // 全角「＼」
+  const forms = [BS, YEN, FULL_YEN, FULL_BS];
+
+  it("バックスラッシュ・全角バックスラッシュ・全角円記号・円記号は、すべて「¥」（U+00A5）になる", () => {
+    for (const f of forms) expect(normalizeForSearch(f)).toBe(YEN);
+    expect(normalizeForSearch(BS + "23,507")).toBe(YEN + "23,507");
+    expect(normalizeForSearch(FULL_BS + "２３，５０７")).toBe(YEN + "23,507");
+  });
+
+  it("正規化は冪等（正規化済みの文字列を再度正規化しても同じ。buildSearchTextの結果をmatchesQueryに渡せる前提）", () => {
+    for (const f of forms) {
+      const once = normalizeForSearch(f + "23,507 ウマ");
+      expect(normalizeForSearch(once)).toBe(once);
+    }
+  });
+
+  it("stripForMatchでも同様にそろう", () => {
+    for (const f of forms) expect(stripForMatch(f + " 23,507")).toBe(YEN + "23,507");
+  });
+
+  it("バックスラッシュで入力した金額が、「¥」「￥」の項目・記号の無い項目に一致する（matchesQuery）", () => {
+    const q = BS + "23,507";
+    expect(matchesQuery(YEN + "23,507", q)).toBe(true);
+    expect(matchesQuery(FULL_YEN + "23,507", q)).toBe(true);
+    expect(matchesQuery(FULL_BS + "23,507", q)).toBe(true);
+    expect(matchesQuery(BS + "23,507", q)).toBe(true);
+    expect(matchesQuery("23,507", q)).toBe(false); // 記号付きで検索したら、記号の無い対象には一致しない（従来の「¥」と同じ）
+    expect(matchesQuery(YEN + "23,508", q)).toBe(false);
+  });
+
+  it("記号の無い検索語は、どの記号の項目にも一致する（matchesQuery）", () => {
+    for (const f of forms) expect(matchesQuery(f + "23,507", "23,507")).toBe(true);
+  });
+
+  it("「¥」「￥」「\」「＼」は、検索語と対象のどの組み合わせでも相互に一致する", () => {
+    for (const q of forms) {
+      for (const h of forms) expect(matchesQuery(h + "100", q + "100")).toBe(true);
+    }
+  });
+
+  it("matchesFieldsでも同様（別々の項目・数値と組み合わせてもよい）", () => {
+    for (const f of forms) {
+      expect(matchesFields(["山田商店", f + "23,507"], BS + "23,507")).toBe(true);
+      expect(matchesFields(["山田商店", f + "23,507"], "山田 " + f + "23,507")).toBe(true);
+      expect(matchesFields(["山田商店", f + "23,507"], "23,507")).toBe(true);
+      expect(matchesFields(["山田商店", f + "23,508"], BS + "23,507")).toBe(false);
+    }
+    expect(matchesFields(["山田商店", 23507], BS + "23507")).toBe(false); // 数値は記号を持たないので、記号付きの検索語は一致しない
+    expect(matchesFields(["山田商店", 23507], "23507")).toBe(true);
+  });
+
+  it("buildSearchTextもそろえる", () => {
+    for (const f of forms) expect(buildSearchText(["山田", f + "23,507"])).toBe("山田" + YEN + "23,507");
+  });
+
+  it("バックスラッシュを含まない既存の検索の結果は変わらない", () => {
+    expect(normalizeForSearch("ＡＢｃ１２３")).toBe("abc123");
+    expect(normalizeForSearch("うまかれー")).toBe("ウマカレー");
+    expect(normalizeForSearch("ﾄｸﾈ")).toBe("トクネ");
+    expect(normalizeForSearch("a/b-c")).toBe("a/b-c");
+    expect(matchesQuery("ウマカレー 中辛", "うま 中辛")).toBe(true);
+    expect(matchesFields(["ウマ", "カレー"], "マカ")).toBe(false);
+  });
+});

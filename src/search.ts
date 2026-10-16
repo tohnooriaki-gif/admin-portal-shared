@@ -22,10 +22,13 @@ function hiraganaToKatakana(s: string): string {
  *  - NFKC で 全角英数「Ａ１」→「A1」、半角カナ「ﾄｸﾈ」→「トクネ」、全角スペース→半角 などに統一
  *  - toLowerCase で大文字小文字を無視
  *  - ひらがな→カタカナ寄せで「うまカレー」「ウマカレー」のような表記ゆれを無視
+ *  - バックスラッシュ（U+005C）を「¥」（U+00A5）にそろえる（v3.19〜）。日本語キーボードの「¥」キーは
+ *    多くの環境でバックスラッシュを入力するため。全角「￥」（U+FFE5）はNFKCで「¥」に、全角「＼」
+ *    （U+FF3C）はNFKCでバックスラッシュになってから「¥」にそろうので、「¥」「￥」「\」「＼」はすべて同じになる
  * 例: 「Ａ」「A」「ａ」「a」はすべて同じ "a" に、「か」「カ」はすべて同じ "カ" になる
  */
 export function normalizeForSearch(s: string): string {
-  return hiraganaToKatakana((s ?? "").normalize("NFKC").toLowerCase());
+  return hiraganaToKatakana((s ?? "").normalize("NFKC").toLowerCase()).replace(/\\/g, "¥");
 }
 
 /**

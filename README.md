@@ -100,6 +100,10 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
   - `normalizeForSearch(s)`: NFKC（全角英数→半角、半角カナ→全角カナ（濁点は合成）、全角スペース→半角、
     NFDの結合濁点→合成）→ 小文字化 → ひらがな→カタカナ寄せ（コードポイント+0x60。「ゔ」→「ヴ」）。
     空白は除去しない。`undefined`/`null`は空文字
+    **バックスラッシュ（U+005C）を「¥」（U+00A5）にそろえる（v3.19〜）**: 日本語キーボードの「¥」キーは多くの環境で
+    バックスラッシュを入力するため（「¥」「￥」「バックスラッシュ」「全角バックスラッシュ」はすべて同じ文字になる。
+    検索語・検索対象の両方に効き、`stripForMatch`・`matchesQuery`・`matchesFields`・`buildSearchText`にも及ぶ）。
+    バックスラッシュを含まない文字列の結果は変わらない。記号の無い検索語（「23,507」）は、どの記号付きの項目にも一致する
   - `stripForMatch(s)`: 上に加えて、半角・全角の空白をすべて除去する（対象テキスト側用。「運 賃」と「運賃」を同一視）
   - `matchesQuery(haystack, query)`: クエリを`normalizeForSearch`してスペース（半角・全角）で区切り、**すべての語**が
     `stripForMatch(haystack)`に部分一致すればtrue（AND）。空・空白だけのクエリは常にtrue
@@ -313,7 +317,7 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.18"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.19"
 }
 ```
 
@@ -387,7 +391,7 @@ export const config = {
 
 - **破壊的変更**: メジャータグを切る（`v1` → `v2` → `v3`）
 - **非破壊的変更**（新規exportの追加・バグ修正・ドキュメント修正など）: マイナータグを切る
-  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9` → `v3.10` → `v3.11` → `v3.12` → `v3.13` → `v3.14` → `v3.15` → `v3.16` → `v3.17` → `v3.18`）。既存のメジャータグは動かさない（他アプリが意図せず
+  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9` → `v3.10` → `v3.11` → `v3.12` → `v3.13` → `v3.14` → `v3.15` → `v3.16` → `v3.17` → `v3.18` → `v3.19`）。既存のメジャータグは動かさない（他アプリが意図せず
   巻き込まれないように）
 
 最新のタグは `git tag -l --sort=-creatordate` で確認するか、`CHANGELOG.md` を参照。
