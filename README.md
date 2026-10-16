@@ -13,7 +13,7 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
 
 `tests/`配下にVitest（price-appと同一）でユニットテストがある。対象は`src/`配下の**純粋なロジック
 のみ**（`session`・`sessionHeaders`・`basePath`・`loginRedirect`・`middlewareMatcher`・`db`・
-`format`・`supabase`・`portalUsers`（差し替えたfetchで）・`components/ui`の`createUiKit()`が返す文字列・`components/StickyActionBar`・`components/SearchValue`・`components/SearchInput`・`components/FilterResetLink`のクラス組み立て）。UIコンポーネント自体の
+`format`・`supabase`・`portalUsers`（差し替えたfetchで）・`search`・`components/ui`の`createUiKit()`が返す文字列・`components/StickyActionBar`・`components/SearchValue`・`components/SearchInput`・`components/FilterResetLink`のクラス組み立て）。UIコンポーネント自体の
 レンダリング・見た目のスナップショットは対象外（`UserMenu`の外側クリック等のインタラクションは
 未着手。全体管理セッションのTODO.mdで管理、`TODO.md`参照）。
 
@@ -94,6 +94,26 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
   Vitestは、実際のsupabase-jsクライアント＋差し替えたfetchで、送られるリクエスト（`Accept-Profile: portal`・
   `login_key`のフィルター）、`null`と`PortalUsersError`の区別、形式が不正なログインID（ケルビン記号等）の拒否、
   ブラウザ側での呼び出しの拒否を検証（`tests/portalUsers.test.ts`）。
+- `search`: 検索語・検索対象の正規化と、スペース区切りAND検索のマッチング（v3.17〜）。receipt-appの
+  `lib/search.ts`を**挙動を変えずに**移したもの（全アプリの検索のひらがな・カタカナ対応の共通化）。DOM・
+  Next.jsに依存しない純粋関数で、サーバー側でもクライアント側でも使える。
+  - `normalizeForSearch(s)`: NFKC（全角英数→半角、半角カナ→全角カナ（濁点は合成）、全角スペース→半角、
+    NFDの結合濁点→合成）→ 小文字化 → ひらがな→カタカナ寄せ（コードポイント+0x60。「ゔ」→「ヴ」）。
+    空白は除去しない。`undefined`/`null`は空文字
+  - `stripForMatch(s)`: 上に加えて、半角・全角の空白をすべて除去する（対象テキスト側用。「運 賃」と「運賃」を同一視）
+  - `matchesQuery(haystack, query)`: クエリを`normalizeForSearch`してスペース（半角・全角）で区切り、**すべての語**が
+    `stripForMatch(haystack)`に部分一致すればtrue（AND）。空・空白だけのクエリは常にtrue
+  - **吸収しないもの（現状の仕様。テストで固定）**: 「ヴ」と「ブ」、小書きかな（「ゃ」と「や」、「ッ」と「ツ」は別扱い）、
+    漢字とかな、繰り返し記号「ゝ」。長音「ー」はそのまま（半角「ｰ」は「ー」になる）
+  - **注意（複数項目の検索）**: `stripForMatch`は対象側の空白をすべて除去するため、複数の項目を空白でつないだ文字列を
+    `haystack`に渡すと、項目の境界をまたいでマッチする（「ウマ」「カレー」→「マカ」にマッチ）。項目を
+    空白以外の区切り（例: `""`）でつなぐこと（語ごとのANDは項目をまたいで使える）
+  - **DB側の検索（ILIKE）はひらがな・カタカナを吸収できない**。この関数はJS側の絞り込み用。DBに渡す検索語を
+    表記違いに展開する処理は含まない（必要になれば別途追加）
+  ```ts
+  import { matchesQuery } from "admin-portal-shared/search";
+  const hits = items.filter((it) => matchesQuery(`${it.name} ${it.code}`, query));
+  ```
 - `components/UserMenu`: ヘッダー右上のユーザーメニュー（`{ portalUrl, userName }`を受け取る）。
   「アプリ一覧へ戻る」「ログアウト」のドロップダウン。price-app/receipt-app双方で実装が完全に
   一致していたため共通化（v3〜）。v3.3で長い名前・メールアドレスへの耐性を追加（名前は
@@ -281,7 +301,7 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.16"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.17"
 }
 ```
 
@@ -341,7 +361,7 @@ export const config = {
 
 - **破壊的変更**: メジャータグを切る（`v1` → `v2` → `v3`）
 - **非破壊的変更**（新規exportの追加・バグ修正・ドキュメント修正など）: マイナータグを切る
-  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9` → `v3.10` → `v3.11` → `v3.12` → `v3.13` → `v3.14` → `v3.15` → `v3.16`）。既存のメジャータグは動かさない（他アプリが意図せず
+  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9` → `v3.10` → `v3.11` → `v3.12` → `v3.13` → `v3.14` → `v3.15` → `v3.16` → `v3.17`）。既存のメジャータグは動かさない（他アプリが意図せず
   巻き込まれないように）
 
 最新のタグは `git tag -l --sort=-creatordate` で確認するか、`CHANGELOG.md` を参照。
