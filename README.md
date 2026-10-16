@@ -105,14 +105,26 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
     `stripForMatch(haystack)`に部分一致すればtrue（AND）。空・空白だけのクエリは常にtrue
   - **吸収しないもの（現状の仕様。テストで固定）**: 「ヴ」と「ブ」、小書きかな（「ゃ」と「や」、「ッ」と「ツ」は別扱い）、
     漢字とかな、繰り返し記号「ゝ」。長音「ー」はそのまま（半角「ｰ」は「ー」になる）
-  - **注意（複数項目の検索）**: `stripForMatch`は対象側の空白をすべて除去するため、複数の項目を空白でつないだ文字列を
-    `haystack`に渡すと、項目の境界をまたいでマッチする（「ウマ」「カレー」→「マカ」にマッチ）。項目を
-    空白以外の区切り（例: `""`）でつなぐこと（語ごとのANDは項目をまたいで使える）
-  - **DB側の検索（ILIKE）はひらがな・カタカナを吸収できない**。この関数はJS側の絞り込み用。DBに渡す検索語を
+  - **複数項目を対象にする検索は、`matchesFields`を使う（v3.18〜）。文字列を自前で空白連結して`matchesQuery`に渡さない**
+    （`stripForMatch`は対象側の空白をすべて除去するため、項目を空白でつなぐと項目の境界をまたいで偽の一致が出る。
+    例: 「ウマ」「カレー」の連結に「マカ」がマッチする）。検索処理を各アプリで共通にし、システムごとの違いを出さないための規則
+  - `matchesFields(fields, query)`: `fields`は`ReadonlyArray<string | number | null | undefined>`。各項目を`stripForMatch`と
+    同じ正規化にして、空白以外の区切り（`\u0001`）でつなぎ、クエリは`matchesQuery`と同じ（スペース区切りのAND、半角・全角
+    スペース、空・空白だけは常にtrue）。**語は1つの項目の中で一致したときだけ一致**（境界をまたがない）が、複数の語が
+    別々の項目に一致するのはOK。`null`・`undefined`・空文字（正規化後に空になるもの）の項目は飛ばし、数値は文字列にする
+    （金額・残金の検索用。0・負数・小数も。NaN・Infinityは飛ばす）。金額をカンマ区切りで表示している画面で、カンマ付きの
+    表記でも検索させたい場合は、数値と整形した文字列の両方を項目に渡す
+  - `buildSearchText(fields)`: 検索対象のテキストの組み立てだけを行う（事前に作っておきたいとき用。500件規模なら
+    キーストロークごとに`matchesFields`で都度組み立てて問題ない）。結果は`matchesQuery(text, query)`にも渡せ、
+    境界をまたぐ偽の一致は起きない
+  - 項目が1つだけなら`matchesFields([x], q)`は`matchesQuery(x, q)`と同じ結果（テストで確認）
+  - **DB側の検索（ILIKE）はひらがな・カタカナを吸収できない**。これらの関数はJS側の絞り込み用。DBに渡す検索語を
     表記違いに展開する処理は含まない（必要になれば別途追加）
   ```ts
-  import { matchesQuery } from "admin-portal-shared/search";
-  const hits = items.filter((it) => matchesQuery(`${it.name} ${it.code}`, query));
+  import { matchesFields } from "admin-portal-shared/search";
+
+  // 複数項目（名前・コード・備考・金額）を対象にする。自前で空白連結しない
+  const hits = items.filter((it) => matchesFields([it.name, it.code, it.note, it.amount], query));
   ```
 - `components/UserMenu`: ヘッダー右上のユーザーメニュー（`{ portalUrl, userName }`を受け取る）。
   「アプリ一覧へ戻る」「ログアウト」のドロップダウン。price-app/receipt-app双方で実装が完全に
@@ -301,7 +313,7 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.17"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.18"
 }
 ```
 
@@ -361,7 +373,7 @@ export const config = {
 
 - **破壊的変更**: メジャータグを切る（`v1` → `v2` → `v3`）
 - **非破壊的変更**（新規exportの追加・バグ修正・ドキュメント修正など）: マイナータグを切る
-  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9` → `v3.10` → `v3.11` → `v3.12` → `v3.13` → `v3.14` → `v3.15` → `v3.16` → `v3.17`）。既存のメジャータグは動かさない（他アプリが意図せず
+  （`v2` → `v2.1`、`v3` → `v3.1` → `v3.2` → `v3.3` → `v3.4` → `v3.5` → `v3.6` → `v3.7` → `v3.8` → `v3.9` → `v3.10` → `v3.11` → `v3.12` → `v3.13` → `v3.14` → `v3.15` → `v3.16` → `v3.17` → `v3.18`）。既存のメジャータグは動かさない（他アプリが意図せず
   巻き込まれないように）
 
 最新のタグは `git tag -l --sort=-creatordate` で確認するか、`CHANGELOG.md` を参照。

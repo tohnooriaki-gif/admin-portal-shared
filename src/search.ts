@@ -51,3 +51,52 @@ export function matchesQuery(haystack: string, query: string): boolean {
   const target = stripForMatch(haystack);
   return terms.every((t) => target.includes(t));
 }
+
+// ---- 複数項目を対象にする検索（v3.18〜） ----
+// 上の3関数（v3.17、receipt-appから移したもの）は変えない。ここから下は共通化のための追加。
+
+/** 項目の境界を表す区切り。空白ではない制御文字なので、`stripForMatch`の空白除去で消えず、クエリの語にも現れない */
+const FIELD_SEPARATOR = "\u0001";
+
+/** 検索対象の項目。`null`・`undefined`・空文字は飛ばし、数値は文字列にする（金額・残金の検索用） */
+export type SearchField = string | number | null | undefined;
+
+/**
+ * 複数の項目から、検索対象のテキスト（正規化済み）を組み立てる。
+ * 各項目に`stripForMatch`と同じ正規化（NFKC・小文字化・ひらがな→カタカナ・空白除去）をして、
+ * 空白以外の区切りでつなぐ。`null`・`undefined`・空文字（正規化後に空になるもの）の項目は飛ばす。
+ * 数値は文字列にする（有限でない数値（NaN・Infinity）は飛ばす）。
+ *
+ * 組み立てたテキストは、`matchesQuery(text, query)`にも渡せる（正規化は冪等で、区切りは
+ * 空白除去で消えないため、境界をまたぐ偽の一致は起きない）。事前に組み立てておきたいときに使う。
+ */
+export function buildSearchText(fields: ReadonlyArray<SearchField>): string {
+  const parts: string[] = [];
+  for (const f of fields) {
+    if (f === null || f === undefined) continue;
+    if (typeof f === "number" && !Number.isFinite(f)) continue;
+    const text = stripForMatch(String(f)).replace(/\u0001/g, "");
+    if (text !== "") parts.push(text);
+  }
+  return parts.join(FIELD_SEPARATOR);
+}
+
+/**
+ * 複数項目を対象にしたスペース区切りのAND検索。**複数項目を対象にするときは、この関数を使うこと
+ * （文字列を自前で空白連結して`matchesQuery`に渡さない: 項目の境界をまたいで偽の一致が出る）**。
+ *
+ * - 語は、**1つの項目の中**で一致したときだけ一致とする（「ウマ」「カレー」の項目に「マカ」は不一致）
+ * - 複数の語が**別々の項目**に一致するのはOK（ANDは項目をまたいで成り立つ）
+ * - クエリの扱い（スペース区切り・半角全角・ひらがなカタカナ・大文字小文字）は`matchesQuery`と同じ。
+ *   空・空白だけのクエリは常にtrue
+ */
+export function matchesFields(fields: ReadonlyArray<SearchField>, query: string): boolean {
+  const terms = normalizeForSearch(query)
+    .replace(/\u0001/g, "")
+    .trim()
+    .split(/[\s　]+/)
+    .filter(Boolean);
+  if (terms.length === 0) return true;
+  const target = buildSearchText(fields);
+  return terms.every((t) => target.includes(t));
+}

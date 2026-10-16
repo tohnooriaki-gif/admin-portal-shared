@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { matchesQuery, normalizeForSearch, stripForMatch } from "../src/search";
+import { buildSearchText, matchesFields, matchesQuery, normalizeForSearch, stripForMatch } from "../src/search";
 
 // receipt-appの lib/search.ts を挙動を変えずに移したもの。このテストは「現在の挙動」を固定する
 // （receipt-appを共通版に置き換えても挙動が変わらないことの根拠）。限界も含めて明記している。
@@ -155,5 +155,94 @@ describe("matchesQuery", () => {
     expect(matchesQuery("ヴァイオリン", "ゔぁいおりん")).toBe(true);
     expect(matchesQuery("ッ", "つ")).toBe(false);
     expect(matchesQuery("運賃", "うんちん")).toBe(false);
+  });
+});
+
+describe("buildSearchText（v3.18）", () => {
+  it("各項目をstripForMatchと同じ正規化にして、空白以外の区切りでつなぐ", () => {
+    expect(buildSearchText(["ウマ カレー", "Ａ１"])).toBe("ウマカレーa1");
+    expect(buildSearchText(["うまかれー"])).toBe(stripForMatch("うまかれー"));
+  });
+
+  it("null・undefined・空文字・空白だけの項目は飛ばす（区切りも残さない）", () => {
+    expect(buildSearchText([null, undefined, "", "  　 ", "ウマ", null, "カレー"])).toBe("ウマカレー");
+    expect(buildSearchText([])).toBe("");
+    expect(buildSearchText([null, undefined, ""])).toBe("");
+  });
+
+  it("数値は文字列にする（0・負数・小数も）。NaN・Infinityは飛ばす", () => {
+    expect(buildSearchText([1234567, 0, -100, 1.5])).toBe("12345670-1001.5");
+    expect(buildSearchText([NaN, Infinity, -Infinity, 5])).toBe("5");
+  });
+
+  it("項目に区切りの制御文字が含まれていても、境界は増えない", () => {
+    expect(buildSearchText(["ウマ", "カレー"])).toBe("ウマカレー");
+  });
+
+  it("組み立てたテキストはmatchesQueryにも渡せ、境界をまたいで一致しない", () => {
+    const text = buildSearchText(["ウマ", "カレー", 1200]);
+    expect(matchesQuery(text, "うまかれー")).toBe(false);
+    expect(matchesQuery(text, "うま 1200")).toBe(true);
+    expect(matchesQuery(text, "マカ")).toBe(false);
+    expect(matchesQuery(text, "")).toBe(true);
+  });
+});
+
+describe("matchesFields（v3.18）", () => {
+  it("項目の境界をまたぐ偽の一致が出ない（「ウマ」「カレー」で「マカ」は不一致）", () => {
+    expect(matchesFields(["ウマ", "カレー"], "マカ")).toBe(false);
+    expect(matchesFields(["ウマ", "カレー"], "うまか")).toBe(false);
+    expect(matchesFields(["ウマ", "カレー"], "レー")).toBe(true);
+  });
+
+  it("1つの項目の中での一致はOK（項目内の空白は無視）", () => {
+    expect(matchesFields(["ウマ カレー", "中辛"], "マカ")).toBe(true);
+    expect(matchesFields(["特選ウマカレー"], "カレー")).toBe(true);
+  });
+
+  it("別々の項目に語が分かれてもANDで一致する（半角・全角スペース区切り）", () => {
+    expect(matchesFields(["ウマカレー", "山田商店", 1200], "カレー 山田")).toBe(true);
+    expect(matchesFields(["ウマカレー", "山田商店", 1200], "カレー　1200")).toBe(true);
+    expect(matchesFields(["ウマカレー", "山田商店", 1200], "カレー 鈴木")).toBe(false);
+  });
+
+  it("ひらがな↔カタカナ、全角↔半角、大文字↔小文字、半角カナを区別しない", () => {
+    expect(matchesFields(["ウマカレー", "ABC"], "うまかれー")).toBe(true);
+    expect(matchesFields(["うまかれー", "ａｂｃ"], "ウマカレー abc")).toBe(true);
+    expect(matchesFields(["トクネ"], "ﾄｸﾈ")).toBe(true);
+    expect(matchesFields(["ﾄｸﾈ"], "とくね")).toBe(true);
+  });
+
+  it("null・undefined・空文字の項目は飛ばし、数値は文字列として検索できる", () => {
+    expect(matchesFields([null, undefined, "", "ウマ"], "ウマ")).toBe(true);
+    expect(matchesFields([null, undefined, ""], "ウマ")).toBe(false);
+    expect(matchesFields(["山田商店", 125000, 0], "125000")).toBe(true);
+    expect(matchesFields(["山田商店", 125000, 0], "0")).toBe(true);
+    expect(matchesFields([-3000], "-3000")).toBe(true);
+    expect(matchesFields([NaN], "nan")).toBe(false);
+  });
+
+  it("空のクエリ・空白だけのクエリ・undefined/nullのクエリは常にtrue（項目が空でも）", () => {
+    expect(matchesFields(["ウマ"], "")).toBe(true);
+    expect(matchesFields(["ウマ"], "  　 ")).toBe(true);
+    expect(matchesFields([], "")).toBe(true);
+    expect(matchesFields([null], "")).toBe(true);
+    expect(matchesFields(["ウマ"], undefined as unknown as string)).toBe(true);
+    expect(matchesFields(["ウマ"], null as unknown as string)).toBe(true);
+  });
+
+  it("クエリに区切りの制御文字が混ざっても、境界をまたいで一致しない", () => {
+    expect(matchesFields(["ウマ", "カレー"], "ウマカレー")).toBe(false);
+    expect(matchesFields(["ウマ", "カレー"], "マカ")).toBe(false);
+  });
+
+  it("項目が1つだけなら、matchesQueryと同じ結果になる（クエリの扱いが食い違わない）", () => {
+    const haystacks = ["ウマカレー 中辛 10個", "運 賃", "ＡＢＣ", "ﾄｸﾈ", "ヴァイオリン", ""];
+    const queries = ["", " ", "うま 中辛", "うま　10", "運賃", "abc", "とくね", "ばいおりん", "ゔぁ", "zzz", "マカ"];
+    for (const h of haystacks) {
+      for (const q of queries) {
+        expect(matchesFields([h], q), `${JSON.stringify(h)} / ${JSON.stringify(q)}`).toBe(matchesQuery(h, q));
+      }
+    }
   });
 });
