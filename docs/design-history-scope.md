@@ -25,7 +25,7 @@
 | 2 | サーバー専用の規則との関係 | `historyScope`・`historyAccess` は**ブラウザでも呼べる**（DB を引かない）。DB を引く `authorizeActor` / `authorizeWrite` だけが従来どおりサーバー専用 |
 | 3 | 履歴テーブルの規約 | 列名 `actor_id`（text・null 可・外部キーなし・`portal.users.id` を入れる）＋名前のスナップショット＋索引 `(actor_id, date desc)` |
 | 4 | SQL の共通化 | **実行できる共通の関数・ビューは作らない**。照合の SQL は**テンプレート**（README か docs）として共有し、各アプリが自分のテーブルに当てはめてユーザーが実行する |
-| 5 | `history.view` | **廃止して役割で固定**（payment-app の提案と同じ。例外: price-app は「価格改定履歴」が同じ権限を使っているので、別に決める）。権限画面は、読み取り専用の説明行に置き換える案 |
+| 5 | `history.view` | **未確定**（ユーザーは検討途中）。案 A＝廃止して役割で固定（権限画面は説明行に置き換え）／案 B＝残す（意味は「履歴の画面を開けるか」。範囲は役割固定で、止めることだけできる。閲覧のみ✕固定、管理者◯固定は論点）。案 B の場合の共通ヘルパーは `canViewHistory`・`historyAccess(user, granted)`・`historyViewLock`（§4）。receipt-app は権限項目なしで役割のみ |
 | 6 | 見落としやすい読み取り経路 | 履歴の画面以外にも履歴を読む所がある（price-app の商品詳細・ユーザー管理）。**同じ規則を通す**かの判断が要る（§5） |
 | 6b | システム用の操作者 | `actor_id` が `sys_…` ならシステム用（予約）。null の旧行とは別。`isSystemActor(id)` の共通ヘルパーを1つだけ置く案（§3-5・§3-6） |
 | 7 | タグ | `historyScope` は **v3.21 として単独**。`createServiceClient` の既定を `cache: "no-store"` にする案は**別のタグ**（§7） |
@@ -50,12 +50,13 @@ export type HistoryAccess =
   | { scope: "own"; actorId: string }
   | { scope: "none" };
 export function historyAccess(user: { id: string; role: string } | null | undefined): HistoryAccess;
+// 案 B（history.view を残す。§4）の場合は第2引数 granted: boolean | null | undefined が加わる（各アプリの history.view の値。権限項目の無い receipt-app は true）
 ```
 
 - **内部の対応表は `Record<PortalRole, HistoryScope>`** にする。ロールを追加したとき、**型エラーで「履歴の範囲」を決めさせる**
   （今の README の「ロール追加は3か所」に、範囲の決定が漏れない。`canWrite` も同じ形に寄せられるが、v3.20 の挙動は変えない）
 - `historyScope(role)`: 画面側（メニューを出すか）は role だけで足りる。payment-app・receipt-app の希望どおり
-- `historyAccess(user)`: データを読む側（`getActionHistory`）が使う。`authorizeActor` の結果の `user` をそのまま渡せる
+- `historyAccess(user)`: データを読む側（`getActionHistory`）が使う。`authorizeActor` の結果の `user` をそのまま渡せる。`history.view` を残す案 B では `historyAccess(user, granted)` になる（§4）
   （`historyAccess(auth.ok ? auth.user : null)`）。**認可に失敗した結果から `all` や `own` が出る経路を作らない**。さらに、**`id` が `sys_` で始まる「ユーザー」は none**（システム用の操作者 id の予約。人のセッションが `sys_…` を名乗って、システムの行を自分のものとして読めないように。§3-5）
 - 絞り込みを DB の問い合わせに付ける処理（`.eq("actor_id", …)`）は**共通部品に入れない**。各アプリのクエリビルダー・テーブルの形が違い、
   ビルダーの型を共通部品が持つと壊れやすい。代わりに README に次の約束を書く:
@@ -84,7 +85,8 @@ export function historyAccess(user: { id: string; role: string } | null | undefi
 
 - `historyScope`: 3ロール（管理者=all・スタッフ=own・閲覧のみ=none）、不明・表記違い・空白付き・空・null・undefined は `none`
 - **すべての `PORTAL_ROLES` に範囲が定義されている**こと（`PORTAL_ROLES` を回して `all`/`own`/`none` のどれかが返る）
-- `historyAccess`: 管理者→`{ scope: "all" }`（id があっても `actorId` を持たない）、スタッフ→`{ scope: "own", actorId: id }`、
+- 【案 B の場合】`history.view`（§4）: `historyViewLock`（管理者=on・閲覧のみ・不明・空=off・スタッフ=null）、`effectiveHistoryView`/`canViewHistory`（管理者は granted が false/null でも可、閲覧のみ・不明は granted が true でも不可、スタッフは true のときだけ可）。`historyAccess` の組み合わせを役割×granted（true/false/null/undefined）の全表で確認（閲覧のみ＋true→none、スタッフ＋false→none、スタッフ＋null→none、管理者＋false→all）。`PORTAL_ROLES` を回して、すべての役割に固定が定義されていること
+- `historyAccess`: 管理者→`{ scope: "all" }`（id があっても `actorId` を持たない）、スタッフ（granted=true）→`{ scope: "own", actorId: id }`、
   閲覧のみ→none、id が空・null のスタッフ→none（fail-closed）、user が null・undefined→none、ロール不明→none
 - 結合: 実際の supabase-js クライアント＋差し替えた fetch で `authorizeActor` を通した `user` を `historyAccess` に渡し、
   ロールを変えた次の呼び出しで範囲が変わること（毎回引く＝キャッシュなしがそのまま効く）
@@ -220,47 +222,121 @@ export function isSystemActor(id: string | null | undefined): boolean;
 
 ## 4. `history.view`（権限）と、役割で固定する方式の関係
 
+**未確定（2026-10-20）**: `history.view` を**廃止する案（A）**と**残す案（B）**を併記する。ユーザーは検討途中で、確定したら管理セッションから連絡が来る。
+(管理セッションから一度「残す」が確定と伝えられたが、のちに訂正された。§4-2b〜4-7 は、案 B を選んだ場合の設計として書いてある。)
+
+
 ### 4-1. 現状
 
 | アプリ | `history.view` の中身 | 既定（管理者／スタッフ／閲覧のみ） | 使っている所 |
 |---|---|---|---|
 | payment-app（7権限） | 「操作履歴の画面を見る」 | 可／可／可（本番の `role_permissions` に行は無く、既定で動いている） | メニュー、`/payments/history` |
 | price-app（6権限） | 「価格改定履歴・操作履歴の閲覧」（**2つの画面で1つの権限**） | 可／可／可 | メニュー2つ、`/history/prices`、`/history/actions` |
+| receipt-app | 権限項目なし | — | 役割だけで決める |
 
-`history.view` は真偽値で、「全件」「自分の分」を表せない。役割で範囲が決まる（管理者=all・スタッフ=own・閲覧のみ=none）ので、
-真偽値の列で選べる余地は**スタッフの on/off だけ**になる（管理者は常に可、閲覧のみは常に不可、が3c の「閲覧のみは役割で固定」と同じ考え）。
+### 4-1b. 案 A と案 B の比較
 
-### 4-2. 案（比較）
+| | **案 A: 廃止して役割で固定** | **案 B: 残す（止めることだけできる）** |
+|---|---|---|
+| 内容 | `history.view` を権限の一覧から外す。範囲は `historyScope(role)` だけで決まる | `history.view` ＝「履歴の画面を開けるか」を残す。範囲は `historyScope(role)` で役割固定。実効は両方の積（広げられず、止めることだけできる）。閲覧のみは✕固定 |
+| 権限画面 | 権限の行が減る（payment-app 7→6）。読み取り専用の説明行（「管理者＝全件／スタッフ＝自分の操作だけ／閲覧のみ＝見られない（役割で固定）」）を置く | 行は減らない。`history.view` の行の閲覧のみ✕固定（管理者◯固定は論点）。説明行はこの行の説明として残す |
+| 共通部品 | `historyScope(role)`／`historyAccess(user)` | 上に加えて `historyViewLock`・`canViewHistory(role, granted)`、`historyAccess(user, granted)`（§4-4） |
+| 管理者がスタッフの履歴閲覧を止める | できない（要件に無い） | できる |
+| 既存の本番データ | `role_permissions` の `history.view` の行は無視される。**`false` のスタッフがいると、廃止で新たに見えるようになる** → 廃止前に各アプリで読み取り確認が要る（payment-app は行なしを確認済み。price-app は未確認） | 行はそのまま効く。**「新たに見える」リスクは無い**。閲覧のみに◯が保存されていても実効は✕ |
+| 設定の組み合わせ | 範囲の決め方が1つ（全アプリ同じ）。fail-open になりうる場所が少ない | 「半分が役割・半分が設定」。判定を共通ヘルパーの1か所に置いて、書き方のずれを防ぐ必要がある |
+| price-app の価格改定履歴 | `history.view` が無くなるので、価格改定履歴の見せ方を別に決める | `history.view` を残すと、閲覧のみ✕固定で価格改定履歴も見られなくなる（§4-7） |
+| receipt-app | 変わらない（権限項目なし・役割のみ） | 変わらない（`historyAccess(user, true)`） |
 
-| 案 | 内容 | 良い点 | 悪い点 |
-|---|---|---|---|
-| **A（推奨）廃止して役割で固定** | `history.view` を権限の一覧から外す。範囲は `historyScope(role)` だけで決まる | 範囲の決め方が1つ（全アプリ同じ）。「スタッフの history.view を外すと自分の履歴も見えない」という組み合わせが無くなる。マトリクスの「無効な設定」が増えない | 管理者が「スタッフの履歴閲覧だけ止める」ことはできなくなる（要件に無い） |
-| B 意味を変えて残す | `history.view` を「スタッフ以上のみ・可否を管理者が決める」に変える（実効 = 役割の範囲 かつ `history.view`。閲覧のみの列は不可に固定） | スタッフの履歴閲覧を管理者が止められる | 画面に「不可に固定の列」ができ、3c の「閲覧のみ書き込み不可」と同種の優先ルールが増える。範囲（all/own）はマトリクスで表せないので、半分だけ役割・半分だけ設定になる |
-| C そのまま残して範囲を重ねる | 今の `history.view` に、`own` の絞り込みを足すだけ | 変更が小さい | 「閲覧のみに history.view を許可 → 見えてしまう」を別途塞ぐ必要がある（要件に反する）。結局、閲覧のみを役割で固定する必要が出て B になる |
+- この設計書の筆者は、当初は **案 A を推奨**していた（要件が役割で全部決まっている／設定が減るほど、アプリ間の違いが減る）。ただし案 B は、
+  「管理者がスタッフの履歴閲覧を止められる」という運用上の余地が残る点が優れる。**どちらを選ぶかはユーザーの判断**で、この設計書では決め打ちしない
+- 案 A の細かい設計（説明行の文言など）は、案 B の §4-5 の説明行と同じ文言を使う。案 A で追加の共通部品は `historyScope`/`historyAccess(user)` だけ（§2-1）
 
-- **A を推奨**。理由: 要件が役割で全部決まっている／ほかの権限と違い、履歴は「許可の粒度」より「誰のものか」で決まる／
-  設定が減るほど、アプリ間の違い（fail-open になりうる場所）が減る
-- 本番の `role_permissions` に `history.view` の行がある場合は、廃止後は**無視される**（`normalizeMatrix` が知らない権限を捨てる）。
-  行を消す SQL は任意（残っていても害は無い）。**行があって `false` のスタッフがいる場合**は、廃止すると見えるようになるので、
-  廃止の前に各アプリで `role_permissions` を読み取りで確認する（payment-app は行なしを確認済み。price-app は未確認 → price-app への確認事項）
+以降の §4-2〜§4-7 は、**案 B を選んだ場合**の設計。
 
-### 4-3. 権限画面の表示への影響
+### 4-2. 案 B の意味（2つの軸を重ねる）
 
-- 権限の行が1つ減る（payment-app: 7→6。price-app: §4-4 の判断による）
-- 行が消えるだけだと「履歴は誰が見られるのか」が画面から分からなくなる。**読み取り専用の説明行**を権限画面の下に置く案:
-  「操作履歴: 管理者＝全件／スタッフ＝自分の操作だけ／閲覧のみ＝見られない（役割で固定。ここでは変更できません）」。
+- `history.view` ＝ **「履歴の画面を開けるか」**。管理者・スタッフの欄は設定できる（下の固定を除く）
+- **見える範囲**（`all`/`own`/`none`）は `historyScope(role)` で**役割固定**（管理者=all・スタッフ=own・閲覧のみ=none）
+- 実効 ＝ 両方の積。**`history.view` は範囲を広げられず、止めることだけできる**
+  - スタッフ: `history.view`=可 → `own`／不可 → `none`
+  - 閲覧のみ: `history.view` が可でも `none`（役割で固定）
+  - 管理者: 常に `all`（下の 4-3）
+  - 役割が不明・空: `none`（fail-closed）
+
+| 役割 | `history.view` の欄 | 実効の範囲 |
+|---|---|---|
+| 管理者 | **◯に固定**（外せない） | `all` |
+| スタッフ | 設定できる（既定 ◯） | ◯なら `own`、✕なら `none` |
+| 閲覧のみ | **✕に固定**（◯にできない） | `none` |
+
+### 4-3. 固定する欄（案 B の共通の提案）
+
+- **閲覧のみ＝✕に固定**: 書き込み系の権限と同じ方式（price-app の `PermissionsEditor` の `isLockedOff`、payment-app の同種の固定）。チェックボックスは無効化し、
+  ツールチップ「閲覧のみでは、操作履歴は見られません（常に不可）」。保存済みの値が ◯ でも**実効は ✕**（`normalizeMatrix` 相当で表示も実効も ✕ に直す）
+- **管理者＝◯に固定（提案）**: 理由は3つ。(1) 管理者が自分の履歴の権限を外すと、**誰も全件を見られなくなる**（監査・調査のため）。(2) 既存の固定（price-app の `lockedOn`:
+  「この権限は管理者から外せません」＝ユーザー管理・権限管理など）と同じ考え方。(3) 要件が「管理者=全件」と役割で定めている。
+  管理者の欄を設定できるようにする案もあるが、自分で自分を締め出せる／保存データの不整合で管理者が見られなくなる、という穴が残る
+- **固定の判定は共通部品の1か所に置く**（`historyViewLock(role)`。§4-4）。画面（チェックボックスの無効化）とサーバー（実効の判定）が**同じ関数**を見るので、
+  保存済みの値（古い行・直接書かれた値）に左右されない。管理者・閲覧のみの保存値は**無視**される
+
+### 4-4. 共通のヘルパー案（案 B の場合。各アプリが同じ書き方になるように）
+
+```ts
+/** history.view の欄の固定。管理者="on"（常に可）、閲覧のみ・不明・空="off"（常に不可）、スタッフ=null（設定できる） */
+export type HistoryViewLock = "on" | "off" | null;
+export function historyViewLock(role: string | null | undefined): HistoryViewLock;
+
+/** 実効の history.view。固定があれば固定、無ければ granted === true のときだけ可（null・undefined・false は不可） */
+export function effectiveHistoryView(role: string | null | undefined, granted: boolean | null | undefined): boolean;
+
+/** 履歴の画面を開けるか（メニュー・ページの入口の判定）。= effectiveHistoryView */
+export const canViewHistory = effectiveHistoryView;
+
+/** データを読む側が使う。none なら DB を読まない、own なら actor_id=自分の id、all なら条件なし。役割固定の historyScope と history.view の積 */
+export function historyAccess(
+  user: { id: string; role: string } | null | undefined,
+  granted: boolean | null | undefined
+): HistoryAccess;
+```
+
+- `historyScope(role)`（§2-1）は**役割だけの上限**として残す（receipt-app が使う。表示の説明にも使える）。`historyAccess` の第2引数 `granted` は**必須**（書き忘れを型で防ぐ）。
+  権限項目の無い receipt-app は、定数 `true` を明示して渡す（`historyAccess(user, true)`）
+- 実効の判定を**3アプリで同じ書き方**にする目的: 「`history.view` が可なら見える」「閲覧のみは別途塞ぐ」のような書き方の違いが、fail-open の穴（閲覧のみに ◯ が保存されていると見える等）になるのを避ける。
+  アプリ側は `canViewHistory(role, matrix["history.view"])`（メニュー・入口）と `historyAccess(auth.user, matrix["history.view"])`（データ）を呼ぶだけにする
+- 実効の判定に必要な `granted` は、各アプリが自分の `role_permissions`（既定値を含む）から取る。`granted` が取れなかった（DB エラー等）ときは `null`/`false` を渡す（スタッフは `none`。管理者は固定なので影響なし）
+- ヘルパーは **DB を引かない・Next.js に依存しない**（§2-3 と同じ。ブラウザでも呼べる）。固定の定義は `PORTAL_ROLES` を使った `Record` で持ち、ロールを追加したとき型エラーで固定の決定を迫る
+- 作らない案: ヘルパーなしで、各アプリが `role === "閲覧のみ" ? false : …` と書く。ロール追加・固定の変更のたびに3アプリを直すことになり、書き方もずれる
+
+### 4-5. 権限画面の表示への影響（案 B。案 A の場合は §4-1b）
+
+- 権限の行は**減らない**（payment-app: 7権限のまま。price-app: 6権限のまま）。変わるのは、`history.view` の行の**閲覧のみ ✕固定・管理者 ◯固定**と、**説明行**
+- `history.view` の行の説明（権限の説明文、または行の下の補足）に、範囲を載せる:
+  「管理者＝全件／スタッフ＝自分の操作だけ／閲覧のみ＝見られない（役割で固定）」。当初の「廃止の代わり」の説明行を、**この行の説明として残す**形。
   文言は `HISTORY_SCOPE_LABELS`（§2-2）で全アプリ揃える
-- 「閲覧のみに書き込み系の権限を設定しても無効」（v3.20 の README の注意）と同様に、画面の注記に並べる
+- スタッフの欄の説明: 「◯でも見えるのは自分の操作だけです。✕にすると、操作履歴の画面を開けなくなります」（範囲は広げられない、を明記）
+- 「閲覧のみに書き込み系の権限を設定しても無効」（v3.20 の README の注意）の隣に、「`history.view` は閲覧のみには付けられない」を並べる
+  （price-app の画面の注記「書き込み系の権限は付けられず、常に不可です」に、履歴の一文を足す）
 
-### 4-4. price-app だけの論点
+### 4-6. 案 B の、案 A との違い・リスク
 
-- price-app の `history.view` は**価格改定履歴**（`price_history`）にも使われている。これは「操作履歴」ではなく**商品データの変更記録**で、
+- 案 A（廃止）なら、管理者はスタッフの履歴閲覧を止められない（要件に無い）。案 B なら止められる
+- **案 B なら、廃止による「新たに見える」リスクは無い**（案 A では残る）: 本番の `role_permissions` に `history.view`=不可のスタッフがいても、そのまま不可として効く（見えるようにならない）。
+  payment-app は行なし（既定で動いている）を確認済み。price-app は行の有無が未確認だが、案 B（残す）なら影響は出ない
+- **逆の変化（見えなくなる側）**: 既定で ◯ だった**閲覧のみ**は、実装後に履歴が見られなくなる（意図した変更。要件）。保存済みの閲覧のみの `history.view`=◯ は、実効 ✕ として扱う（行の書き換えは不要）
+- 「スタッフの `history.view` を外すと、自分の履歴も見えなくなる」という組み合わせは、**意図した動作**として残る（止めることだけできる）。画面の説明で明示する（§4-5）
+- 範囲（`all`/`own`）はマトリクスの真偽値で表せないので、**半分が役割・半分が設定**になる点は残る。そのため、2つの軸を重ねる判定を共通部品の1か所に置く（§4-4）
+
+### 4-7. price-app だけの論点（案 B の場合に変わる点）
+
+- price-app の `history.view` は**価格改定履歴**（`price_history`）の画面にも使われている。これは「操作履歴」ではなく**商品データの変更記録**で、
   ダッシュボードの「最近の価格変更」（`lib/insights.ts`）・商品詳細・価格一覧のチャネル別更新日にも出ている。
   `own`（自分の操作だけ）にすると、価格一覧や商品詳細が人によって違う内容になり、ダッシュボードの集計も揃わなくなる
-- 要件（ユーザーのメモ）は「**操作履歴**」。価格改定履歴を範囲に含めるかは**ユーザーに確認が必要**。案:
-  - 価格改定履歴は対象外（今の全員の閲覧のまま。`history.view` は価格改定履歴のためだけに残す）か、
-  - 価格改定履歴も同じ範囲にする（商品詳細・ダッシュボード・価格一覧の「最後に変わった日」は操作者を含まない形にする）
-- 対象外にした場合、`history.view` は「廃止」ではなく「価格改定履歴の閲覧」に意味を変えて残る（案 A と案 B の中間）。price-app の設計の判断
+- **案 B で `history.view` を残し、閲覧のみを ✕固定にすると、価格改定履歴の画面も閲覧のみは見られなくなる**（同じ権限のため）。これが意図した変更かをユーザーに確認したい。案:
+  1. 価格改定履歴を「操作履歴」と同じ権限・同じ範囲にする（閲覧のみは見られない。スタッフは `own`。商品詳細・ダッシュボード・価格一覧は操作者を含まない形に）
+  2. **価格改定履歴だけ別の権限に分ける**（例: `prices.history`。閲覧のみにも許可できる読み取り系。範囲は役割で変えず全件）。`history.view` は操作履歴だけにする。
+     権限が6→7になる。価格改定履歴の見え方は今のまま
+  3. 価格改定履歴は `history.view` の対象のまま、範囲だけ制限しない（スタッフも全件）。閲覧のみは ✕固定で見られなくなる
+- 要件（ユーザーのメモ）は「**操作履歴**」。上のどれかは price-app の設計とユーザーの判断
 
 ## 5. 履歴の読み取り経路の洗い出し（共通の注意）
 
@@ -315,8 +391,10 @@ payment-app の案（フラグを使わず、順番に3回に分ける）を共�
    各アプリの希望は前者のみ。後者は「own なのに id が無い」書き間違いを型で防ぐための追加（不要なら外せる）
 2. **規約**: 列名 `actor_id`・text・外部キーなし・名前はスナップショット・キーは `portal.users.id`、を共通の規約にしてよいか（§3-1）
 3. **SQL**: 実行できる共通の関数は作らず、テンプレートの共有にとどめてよいか（§3-2）。テンプレートに (B2)（名前と別人のログインIDの衝突の確認）を足してよいか
-4. **`history.view`**: 廃止して役割で固定（推奨）でよいか（§4-2）。権限画面に読み取り専用の説明行を出すか（§4-3）
-5. **price-app の価格改定履歴**: 対象外（全員が今のまま見る）か、同じ範囲にするか（§4-4）。要件は「操作履歴」
+4. **`history.view`**（**未確定**。ユーザーは検討途中）: 案 A＝廃止して役割で固定（payment-app の当初案）／案 B＝残す（意味は「履歴の画面を開けるか」、範囲は役割固定で止めることだけできる、閲覧のみ✕固定）。比較は §4-1b。権限画面の説明行は、案 A では廃止の代わり、案 B では `history.view` の行の説明として残す（§4-5）
+4b. 【案 B の場合】**管理者の `history.view` を◯に固定するか**（提案: 固定。理由: 自分で自分を締め出して誰も全件を見られなくなるのを防ぐ。既存の `lockedOn` と同じ考え方）。固定しない案は、管理者の欄も設定可（§4-3）
+4c. 【案 B の場合】**組み合わせ判定の共通ヘルパー**: `historyViewLock(role)`・`effectiveHistoryView`/`canViewHistory(role, granted)`・`historyAccess(user, granted)`（`granted` 必須。receipt-app は `true` を明示）を共通部品に置くか（§4-4）。置かない案は、各アプリが自分で「閲覧のみは別途塞ぐ」と書く（書き方がずれて穴になりうる）
+5. **price-app の価格改定履歴**: 案 B（`history.view` を残して閲覧のみを✕固定）にすると、**価格改定履歴の画面も閲覧のみは見られなくなる**（同じ権限）。(1)操作履歴と同じ権限・範囲、(2)価格改定履歴だけ別の権限に分ける（権限6→7、見え方は今のまま）、(3)`history.view` のままで範囲は制限しない、のどれか（§4-7）。要件は「操作履歴」
 6. **price-app の商品詳細の履歴タブ**（全ロールに全履歴を出している）: 制限の対象にするか（§5）。対象にしないと「閲覧のみは見られない」と食い違う
 7. **共通メッセージ**: `HISTORY_NONE_MESSAGE`・`HISTORY_SCOPE_LABELS` を共通部品に持つか（§2-2）
 8. **タグ**: `historyScope` は v3.21 単独、キャッシュの既定は別のタグ（§7）でよいか
@@ -333,6 +411,6 @@ payment-app の案（フラグを使わず、順番に3回に分ける）を共�
 - システム用の操作者（§3-5）は、まだ誰も実装していない将来の要件の設計。MakeShop 連携の認証経路・履歴への書き込みの形は未設計
 - `portal.users.id` が `sys_` で始まる行が、いま本番に無いことは未確認（読み取りが必要。`select id from portal.users where id like 'sys\_%' escape '\'`。ユーザーが実行）
 - price-app の設計（`docs/design-history-scope.md`）は、この設計書の作成時点で未作成。§4-4・§5 の price-app の記述は、コードの読み取り（`app/`・`lib/`）に基づく
-- price-app の `role_permissions` に `history.view` の行があるか（本番）は未確認（読み取りが必要。確認はアプリ側のセッション）
+- price-app の `role_permissions` に `history.view` の行があるか（本番）は未確認。**案 A（廃止）を選ぶ場合は必須の確認**（`false` のスタッフがいると、廃止で新たに見える）。案 B（残す）なら前提条件ではない（閲覧のみに ◯ が保存されていても実効は ✕）
 - `portal.users` の `login_id`/`login_key` の一意制約は、receipt-app・payment-app の設計書の前提に依る（このリポジトリの `portalUsers.ts` は `login_key` の等価で1行を期待している）
 - Next.js のデータキャッシュ（§7）の挙動は、このリポジトリでは実測していない
