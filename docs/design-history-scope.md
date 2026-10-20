@@ -115,27 +115,37 @@ export function historyAccess(user: { id: string; role: string } | null | undefi
   - テーブル名・列名を文字列で受け取る動的 SQL になり、`portal` スキーマに権限の強い関数が1つ増える。1回きりの作業のために置く物ではない
   - 実行は各アプリのテーブルごとにユーザーが SQL Editor で行う（確認の結果を見てから埋める）。共通の関数に包むと、確認の段取りが見えにくくなる
   - 戻しも関数だと「消すのを忘れる」物が増える
-- **できる**: 照合の SQL の**テンプレート**。payment-app の案が上位互換（名前→ログインIDの順）。置き換えるのは `<schema>.<table>` と `<名前の列>` だけ。
-  実装時に README か `docs/` に載せる（§3-3）
+- **できる**: 照合の SQL の**テンプレート**（確定の形は §3-3。**名前のみで照合**）。置き換えるのは `<schema>.<table>` と `<名前の列>` だけ。
+  実装時に README か `docs/` に載せる
 - **アプリごとに違うまま**: テーブル名・列の構成（payment-app は `changes` jsonb、receipt-app は取込の `__000` 行）、DDL のマイグレーションファイル、
   上限件数、画面。これらは各アプリの設計のとおり
 
-### 3-3. テンプレート（実行はユーザー。各アプリの設計書の SQL と同じ内容を一般化したもの）
+### 3-3. 過去の行の照合ルールとテンプレート（確定 2026-10-20、ユーザー判断）
+
+**確定した照合ルール**:
+
+1. 過去の行のうち、履歴の名前が `portal.users.name` の**現ユーザーちょうど1人だけ**に一致する行だけ、`actor_id` を埋める
+2. それ以外（一致する人がいない・同じ名前が2人以上）は、`actor_id` を**空（null）のまま**にする ＝ **管理者だけが見える**（スタッフの `own` には出ない）
+3. **`login_id` の照合は採用しない**（名前のみ）。当初の案にあった「名前で一致しなければ `login_id` でも照合する」2本目の更新は、テンプレートに**入れない**
+4. 手で埋める（個別の対応づけ）は、このルールには含めない。必要になったら、各アプリがユーザーの指示で別に行う
+
+テンプレート（実行はユーザー。各アプリの設計書の SQL と同じ内容を一般化したもの）:
 
 ```sql
 -- (A) 列と索引（何度実行しても同じ。既存の行は変えない）
 alter table <schema>.<table> add column if not exists actor_id text;
 create index if not exists <table>_actor_date_idx on <schema>.<table> (actor_id, date desc);
 
--- (B1) 確認: portal.users に同じ名前の人がいないか（出たら、その名前は自動では埋めない）
+-- (B1) 確認: portal.users に同じ名前の人がいないか（出たら、その名前の行は自動では埋まらない＝null のまま）
 select name, count(*) from portal.users group by name having count(*) > 1;
 
--- (B2) 確認: 名前が、ある人の「名前」と別の人の「ログインID」の両方に一致していないか
---      （出たら、名前の一致を優先すると別人の行を埋めてしまう。手で確認する）
+-- (B2) 確認: ある人の「名前」が、別の人の「ログインID」と同じになっていないか（出たら、手で確認する）
+--      （3c 以降は、名前が空だった人の操作を「ログインID」で履歴に記録している。そのログインIDと同じ名前の別人がいると、
+--       その行を別人のものとして埋めてしまう。照合は名前のみだが、この衝突は埋める前に必ず見る）
 select u1.name, u1.id as by_name, u2.id as by_login_id
 from portal.users u1 join portal.users u2 on lower(u2.login_id) = lower(u1.name) and u2.id <> u1.id;
 
--- (B3) 確認: 履歴の名前ごとの件数と、照合の見込み（matched_by: name / login_id / ambiguous / none）
+-- (B3) 確認: 履歴の名前ごとの件数と、照合の見込み（matched_by: name＝埋まる / ambiguous・none＝null のまま）
 with names as (
   select <名前の列> as name, count(*) as rows from <schema>.<table> where actor_id is null group by <名前の列>
 )
@@ -143,34 +153,32 @@ select n.name, n.rows,
   case
     when (select count(*) from portal.users u where u.name = n.name) = 1 then 'name'
     when (select count(*) from portal.users u where u.name = n.name) > 1 then 'ambiguous'
-    when (select count(*) from portal.users u where lower(u.login_id) = lower(n.name)) = 1 then 'login_id'
     else 'none'
   end as matched_by
 from names n order by n.rows desc;
 
--- (C) 埋める（トランザクション。埋まらなかった行を確かめてから commit。違えば rollback）
+-- (C) 埋める（名前が現ユーザーちょうど1人に一致する行だけ。トランザクションの中で。埋まらなかった行を確かめてから commit。違えば rollback）
 begin;
 update <schema>.<table> h set actor_id = u.id::text
   from portal.users u
  where h.actor_id is null and u.name = h.<名前の列>
    and (select count(*) from portal.users u2 where u2.name = h.<名前の列>) = 1;
-update <schema>.<table> h set actor_id = u.id::text
-  from portal.users u
- where h.actor_id is null and lower(u.login_id) = lower(h.<名前の列>)
-   and not exists (select 1 from portal.users u3 where u3.name = h.<名前の列>);
-select <名前の列>, count(*) from <schema>.<table> where actor_id is null group by <名前の列>;
+select <名前の列>, count(*) from <schema>.<table> where actor_id is null group by <名前の列>;  -- 埋まらなかった行（管理者だけが見る行になる）
 commit;  -- 問題があれば rollback;
 
 -- (E) 戻し（アプリを、actor_id を書かない版に戻してから。先に列を消すと履歴の書き込みが失敗する）
 -- drop index if exists <schema>.<table>_actor_date_idx;
 -- alter table <schema>.<table> drop column if exists actor_id;
+-- 埋めた値だけ戻すなら: update <schema>.<table> set actor_id = null;
 ```
 
-- ログインIDの照合（2本目の update）は、名前が空だったときに 3c 以降が記録する `name || loginId` を拾うため。receipt-app の案には無いので、
-  receipt-app は「あっても害は無い」ことを確認して揃えるか、名前のみのままにするかを選ぶ（本番の名前が `portal.users` のログインIDと一致するかは、(B3) で分かる）
-- **(B2) は、この設計書で足した確認**。「名前」と「ログインID」が別の人で一致していると、名前の照合が別人の行を埋める。
-  その場合スタッフが他人の行を見てしまう（制限の目的に反する向きの誤り）ので、埋める前に必ず見る
-- `login_id` の照合は `login_key`（`lower(login_id)` の生成列）でも同じ。一意制約がある前提（`portal.users` のスキーマは変えない）
+- **(B2) は、この設計書で足した確認**。照合は名前のみだが、名前が空のときの記録（`name || loginId`）が履歴に残っているため、
+  「ある人の名前＝別の人のログインID」だと、その行を別人のものとして埋めてしまう。スタッフが他人の行を見てしまう（制限の目的に反する向きの誤り）ので、埋める前に必ず見る。
+  出たときは、その名前の行を埋めない（C の更新から除く）か、手で対応づけるかを、ユーザーと決める
+- 名前が空だったとき、ログインIDで記録された行は、名前では当たらないので**埋まらない**（null のまま＝管理者だけ）。これは確定した許容（`login_id` の照合を採らないため）
+- 同名の衝突（B1）で埋まらない行、改名前の名前で残っている行も、null のまま。いずれも管理者だけが見える
+- 各アプリの設計書との差: payment-app の案にあった `login_id` の2本目の更新と、`matched_by` の `login_id` は**削除**する。receipt-app の案（名前のみ）は、この形に一致している
+- 照合ルールは `portal.users.name` が一意でなくてよい前提（B1 で衝突を見るだけ）。`login_id`/`login_key` の一意制約には依存しない
 
 ### 3-4. 規約に載せるべき注意（README に明記する）
 
@@ -416,7 +424,7 @@ payment-app の案（フラグを使わず、順番に3回に分ける）を共�
 1. **共通部品の形**: `historyScope(role)`（純粋関数）＋ `historyAccess(user)`（own のとき `actorId` を持つ判別共用体）の2本立てでよいか（§2-1）。
    各アプリの希望は前者のみ。後者は「own なのに id が無い」書き間違いを型で防ぐための追加（不要なら外せる）
 2. **規約**: 列名 `actor_id`・text・外部キーなし・名前はスナップショット・キーは `portal.users.id`、を共通の規約にしてよいか（§3-1）
-3. **SQL**: 実行できる共通の関数は作らず、テンプレートの共有にとどめてよいか（§3-2）。テンプレートに (B2)（名前と別人のログインIDの衝突の確認）を足してよいか
+3. **SQL**: **確定**（ユーザー判断 2026-10-20）= 実行できる共通の関数は作らず、テンプレートの共有にとどめる（§3-2）。過去の行は、名前が現ユーザーちょうど1人に一致する行だけ `actor_id` を埋め、残りは null のまま（管理者のみ）。`login_id` の照合は不採用（名前のみ）。(B2)（名前と別人のログインIDの衝突の確認）は、埋める前の確認として含める（§3-3）
 4. **`history.view`**: **確定**（ユーザー判断 2026-10-20）= 残す。意味は「履歴の画面を開けるか」、範囲は役割固定で止めることだけできる、閲覧のみ✕固定。案 A（廃止）は不採用（§4-8）。権限画面の説明行は `history.view` の行の説明として残す（§4-5）
 4-1. **例外の確認**: receipt-app だけ `history.view` を持たない（権限マトリクスの仕組み自体が無い）。理由は十分と考えるが、期限つきの例外として「マトリクス導入時に `history.view` を足す」を設計書・README に残す条件つき（§4-6）
 4b. **確定**: 管理者の `history.view` は◯に固定（ユーザー判断 2026-10-20、price-app・payment-app 共通）。固定の判定は共通部品の1か所（`historyViewLock`）に置く（§4-3）
@@ -438,6 +446,13 @@ payment-app の案（フラグを使わず、順番に3回に分ける）を共�
 - システム用の操作者（§3-5）は、まだ誰も実装していない将来の要件の設計。MakeShop 連携の認証経路・履歴への書き込みの形は未設計
 - `portal.users.id` が `sys_` で始まる行が、いま本番に無いことは未確認（読み取りが必要。`select id from portal.users where id like 'sys\_%' escape '\'`。ユーザーが実行）
 - price-app の設計（`docs/design-history-scope.md`）は、この設計書の作成時点で未作成。§4-4・§5 の price-app の記述は、コードの読み取り（`app/`・`lib/`）に基づく
-- price-app の `role_permissions` に `history.view` の行があるか（本番）は未確認。`history.view` を残す（確定）ので、実装の前提条件ではない（閲覧のみに ◯ が保存されていても実効は ✕、スタッフの不可はそのまま効く）
-- `portal.users` の `login_id`/`login_key` の一意制約は、receipt-app・payment-app の設計書の前提に依る（このリポジトリの `portalUsers.ts` は `login_key` の等価で1行を期待している）
+- price-app の `role_permissions` に `history.view` の行があるか（本番）は未確認。`history.view` 自体は残す（確定）ので、閲覧のみに ◯ が保存されていても実効は ✕、スタッフの不可はそのまま効く。
+  ただし価格改定履歴を `pricehistory.view` に分けるため（§4-9）、**行があるなら、その値を `pricehistory.view` に引き継ぐ必要がある**（実装前の確認事項）
+- `portal.users` の `login_id`/`login_key` の一意制約は、過去の行の照合（§3-3）には使わなくなった（名前のみ）。認可（`portalUsers.ts`）は `login_key` の等価で1行を期待している（従来どおり）
+
+## 10. この設計書の範囲外（別項目）
+
+- **権限表（権限マトリクス）の判定ロジックを共通部品へ寄せる提案**（receipt-app の提案。price-app・payment-app に同じコピーがある）は、操作履歴とは**別項目**として扱う（後日、ユーザーに確認）。
+  **今回の v3.21 には含めない**。この設計書の `historyViewLock` などは `history.view` 専用で、権限表の共通化の前提にも依存にもしていない
+  （将来、権限表の判定が共通化されたら、`historyViewLock` の固定の定義がその仕組みの一部になりうる。そのときに整理し直す）
 - Next.js のデータキャッシュ（§7）の挙動は、このリポジトリでは実測していない
