@@ -121,7 +121,7 @@ export function historyAccess(user: { id: string; role: string } | null | undefi
 - **アプリごとに違うまま**: テーブル名・列の構成（payment-app は `changes` jsonb、receipt-app は取込の `__000` 行）、DDL のマイグレーションファイル、
   上限件数、画面。これらは各アプリの設計のとおり
 
-### 3-3. 過去の行の照合ルールとテンプレート（確定 2026-10-20、ユーザー判断）
+### 3-3. 過去の行の照合ルールとテンプレート（確定 2026-10-20、ユーザー判断。取り違え防止を 2026-10-21 に追加）
 
 **確定した照合ルール**:
 
@@ -129,6 +129,17 @@ export function historyAccess(user: { id: string; role: string } | null | undefi
 2. それ以外（一致する人がいない・同じ名前が2人以上）は、`actor_id` を**空（null）のまま**にする ＝ **管理者だけが見える**（スタッフの `own` には出ない）
 3. **`login_id` の照合は採用しない**（名前のみ）。当初の案にあった「名前で一致しなければ `login_id` でも照合する」2本目の更新は、テンプレートに**入れない**
 4. 手で埋める（個別の対応づけ）は、このルールには含めない。必要になったら、各アプリがユーザーの指示で別に行う
+5. **取り違え防止（2026-10-21、ユーザー判断）**: 同じ名前の**別人**の行を埋めてしまわないように、次の2つを加える
+   - (a) 埋めるのは、名前が現ユーザーちょうど1人に一致し、**かつ、その行の日時が、そのユーザーが作られた日時より後の行だけ**（本人が作られる前の行は、別の人の行）
+   - (b) 埋める前に、**削除済み（と改名前）の同名の事前確認**をする（`portal.user_history` の削除・更新の記録の名前と、履歴の名前の一致。(B4)）
+
+**(a) の作成日時の扱い（重要。確認した結果）**: `portal.users` には `created_at`（`timestamptz not null default now()`）の列が**ある**。ただし、フェーズ3の移行（3a の手順 2、3b 当日の再コピー B-1）で
+`price.users` から `id`・`login_id`・`name`・`role` だけをコピーしているため、**移行で写された既存ユーザーの `created_at` は、本当の作成日ではなく、コピーした日時**になる（手順書 `admin-portal/docs/phase3-3a-sql.md` の読み取りによる。実際の値は (B5) で確認する）。
+そのまま「行の日時 ≧ `users.created_at`」を条件にすると、**移行前の正当な行（例: 2026-09 の履歴）が、既存ユーザーについてすべて除外**され、埋まる行が移行後の分だけになってしまう。
+このため、条件の下限は次のとおりにする（**代替案。管理セッションの依頼の「作成日時が無ければ代替案」に対応**）:
+- **ポータルのユーザー管理画面で作られたユーザー**（3b 以降。`portal.user_history` に `action = 'create'` の記録がある）: その**記録の日時（`at`）以降の行だけ**を埋める。同名の別人が削除されたあとに作られたユーザーの、**前任者の行**を取り違えないための条件
+- **移行で写されたユーザー**（`create` の記録が無い）: 下限を設けない（本当の作成日が分からないため。`created_at` は使わない）。この場合の取り違え（移行前に削除された同名の別人）は、日時では防げない → (B4)・目視（履歴の名前と `portal.users` の名前の一覧）で確認する。移行前の削除は `user_history` に記録が無い
+- 将来、`portal.users.created_at` が正確な作成日になった（または移行日が分かった）場合は、下限を `greatest(...)` で合わせる案もある（今は不要）
 
 テンプレート（実行はユーザー。各アプリの設計書の SQL と同じ内容を一般化したもの）:
 
@@ -146,6 +157,31 @@ select name, count(*) from portal.users group by name having count(*) > 1;
 select u1.name, u1.id as by_name, u2.id as by_login_id
 from portal.users u1 join portal.users u2 on lower(u2.login_id) = lower(u1.name) and u2.id <> u1.id;
 
+-- (B4) 確認: 履歴の名前が、「削除済みのユーザー」または「改名前のユーザー」の名前と同じでないか（出たら、その名前の行は別人の行かもしれない）
+--      kind: deleted＝削除されたユーザーの名前／renamed＝改名されたユーザーの改名前の名前。rows は、その名前で残っている未照合の履歴の件数、row_first〜row_last はその履歴の期間
+--      record_at（削除・改名の日時）より前の行は前任者の行の可能性が高い。後の行は、いまの同名ユーザーの行の可能性が高い
+--      ※ 削除・改名が user_history に記録されるのは 3b（ユーザー管理画面）以降。それより前に削除された人は記録が無い（目視で確認する）
+with past as (
+  select target_name as name, 'deleted' as kind, target_user_id, min(at) as record_at
+    from portal.user_history where action = 'delete' group by target_name, target_user_id
+  union all
+  select before->>'name', 'renamed', target_user_id, min(at)
+    from portal.user_history
+   where action = 'update' and before->>'name' is distinct from after->>'name'
+   group by before->>'name', target_user_id
+)
+select h.<名前の列> as name, p.kind, p.target_user_id, p.record_at,
+       count(*) as rows, min(h.<日時の列>) as row_first, max(h.<日時の列>) as row_last
+  from <schema>.<table> h join past p on p.name = h.<名前の列>
+ where h.actor_id is null
+ group by h.<名前の列>, p.kind, p.target_user_id, p.record_at
+ order by rows desc;
+
+-- (B5) 確認: 各ユーザーの作成日時が信頼できるか。create_record_at が null ＝ 移行で写されたユーザー（created_at は作成日ではなくコピーした日時。下限を設けない）
+select u.id, u.name, u.created_at,
+       (select min(uh.at) from portal.user_history uh where uh.target_user_id = u.id and uh.action = 'create') as create_record_at
+  from portal.users u order by u.created_at;
+
 -- (B3) 確認: 履歴の名前ごとの件数と、照合の見込み（matched_by: name＝埋まる / ambiguous・none＝null のまま）
 with names as (
   select <名前の列> as name, count(*) as rows from <schema>.<table> where actor_id is null group by <名前の列>
@@ -158,12 +194,19 @@ select n.name, n.rows,
   end as matched_by
 from names n order by n.rows desc;
 
--- (C) 埋める（名前が現ユーザーちょうど1人に一致する行だけ。トランザクションの中で。埋まらなかった行を確かめてから commit。違えば rollback）
+-- (C) 埋める（名前が現ユーザーちょうど1人に一致し、かつ、行の日時がそのユーザーの作成日時（ユーザー管理画面で作られた場合は create の記録の日時）以降の行だけ。
+--      トランザクションの中で。埋まらなかった行を確かめてから commit。違えば rollback）
 begin;
 update <schema>.<table> h set actor_id = u.id::text
   from portal.users u
  where h.actor_id is null and u.name = h.<名前の列>
-   and (select count(*) from portal.users u2 where u2.name = h.<名前の列>) = 1;
+   and (select count(*) from portal.users u2 where u2.name = h.<名前の列>) = 1
+   and h.<日時の列> >= coalesce(
+         (select min(uh.at) from portal.user_history uh where uh.target_user_id = u.id and uh.action = 'create'),
+         '-infinity'::timestamptz)
+   -- (B4) に出て、ユーザーと「埋めない」と決めた名前があれば、次の行を足して除く（B4 の結果を見てから）:
+   -- and h.<名前の列> not in ('<埋めない名前>', ...)
+   ;
 select <名前の列>, count(*) from <schema>.<table> where actor_id is null group by <名前の列>;  -- 埋まらなかった行（管理者だけが見る行になる）
 commit;  -- 問題があれば rollback;
 
@@ -179,7 +222,10 @@ commit;  -- 問題があれば rollback;
 - 名前が空だったとき、ログインIDで記録された行は、名前では当たらないので**埋まらない**（null のまま＝管理者だけ）。これは確定した許容（`login_id` の照合を採らないため）
 - 同名の衝突（B1）で埋まらない行、改名前の名前で残っている行も、null のまま。いずれも管理者だけが見える
 - 各アプリの設計書との差: payment-app の案にあった `login_id` の2本目の更新と、`matched_by` の `login_id` は**削除**する。receipt-app の案（名前のみ）は、この形に一致している
-- 照合ルールは `portal.users.name` が一意でなくてよい前提（B1 で衝突を見るだけ）。`login_id`/`login_key` の一意制約には依存しない
+- **(B4)・(C) の日時条件で埋まらない行も、null のまま**（管理者だけが見る）。本人が作られる前の行は、別人の行として扱う（取り違えるより、見えない側に倒す）
+- 照合ルールは `portal.users.name` が一意でなくてよい前提で書いてある（B1 で衝突を見る）。`portal.users` には **`lower(name)` の一意インデックス**（`users_name_lower_uidx`）があり、同名の2人は作れないので、(B1) は通常は0行（安全網）。
+  同名の取り違えは「同時に2人いる」ことではなく、「削除・改名のあとに同じ名前が作られる」ことで起きる → (B4)・日時条件が必要
+- `<日時の列>` は、各アプリの履歴テーブルの操作日時の列（payment-app・receipt-app は `date`）。`portal.user_history` の列: `at`・`action`（create／update／delete）・`target_user_id`・`target_name`・`before`／`after`（jsonb。`name` を含む）
 
 ### 3-4. 規約に載せるべき注意（README に明記する）
 
@@ -585,7 +631,7 @@ export function historyAccess(
 - price-app の設計（`docs/design-history-scope.md`）は、この設計書の作成時点で未作成。§4-4・§5 の price-app の記述は、コードの読み取り（`app/`・`lib/`）に基づく
 - price-app の `role_permissions` に `history.view` の行があるか（本番）は未確認。`history.view` 自体は残す（確定）ので、閲覧のみに ◯ が保存されていても実効は ✕、スタッフの不可はそのまま効く。
   ただし価格改定履歴を `pricehistory.view` に分けるため（§4-9）、**行があるなら、その値を `pricehistory.view` に引き継ぐ必要がある**（実装前の確認事項）
-- `portal.users` の `login_id`/`login_key` の一意制約は、過去の行の照合（§3-3）には使わなくなった（名前のみ）。認可（`portalUsers.ts`）は `login_key` の等価で1行を期待している（従来どおり）
+- `portal.users` の一意制約（`login_key`、`lower(name)`）は `admin-portal/docs/phase3-3a-sql.md` の読み取りで確認した。`created_at` の値が実際にどうなっているか（移行で写されたユーザーは作成日ではなくコピー日時のはず）は、(B5) の結果で確認する（ユーザーが実行）
 
 ## 10. この設計書の範囲外（別項目）
 
