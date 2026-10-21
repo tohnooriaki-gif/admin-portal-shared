@@ -200,7 +200,7 @@ commit;  -- 問題があれば rollback;
 | 2 | **null ＝「照合できない旧行」（管理者だけが見える）とは別**。システム操作は null にしない | null は「不明」、`sys_…` は「正常な操作者」。システム操作を書く関数は `actor_id` を**必須**にして、null を渡せない形にする（書き忘れが「旧行」に化けるのを防ぐ） |
 | 3 | 表示: `portal.users` に無い `sys_…` には「(削除済み)」を付けない。`own` では `sys_…` の行は**決して自分のものにならない**。管理者の全件には出る | 「(削除済み)」を付ける実装がある場合は、`isSystemActor(id)` で除外する（§3-6）。商品詳細（price-app）に出すかは、論点6（§8）の結論に従う |
 | 4 | 操作者 id は**常にサーバーが決める**（画面・外部入力から受けない）。偽装できない。**人のセッションが `sys_…` を名乗れない**ことを確認する | `historyAccess` は、`actorId` が `sys_` で始まる id なら `own` にせず **none** を返す（多重防御。§2-1 に反映）。人の id は `portal.users.id`（`u_…`、サーバーが生成）なので通常は起きないが、**`portal.users.id` に `sys_` を許さない**ことを DB 側でも保証する（下の「ポータル側」）。システム操作の `actor_id` は、各 API ルートの**コード内の定数**にし、リクエストの内容から作らない |
-| 5 | ユーザー管理で、予約名（「MakeShop連携」等）のユーザーを作れないようにする | 履歴の表示上、人の「MakeShop連携」とシステムの「MakeShop連携」が見分けられなくなるのを防ぐ。**admin-portal のユーザー管理の変更**（別セッション）。予約名の一覧は共通部品に**入れない**（連携を足すたびに共通部品のタグが要るため）。admin-portal 側の定数か、名前の登録時の検査にする案。同時に `portal.users.id` に `sys_` を使えない検査（id は生成なので通常は不要だが、DB の CHECK で `id not like 'sys\_%' escape '\'` を足す案）も |
+| 5 | ユーザー管理で、予約名（「MakeShop連携」等）のユーザーを作れないようにする（**確定**: ポータルへ依頼する） | 履歴の表示上、人の「MakeShop連携」とシステムの「MakeShop連携」が見分けられなくなるのを防ぐ。**admin-portal のユーザー管理の変更**（別セッションへの依頼）。予約名の一覧は共通部品に**入れない**（連携を足すたびに共通部品のタグが要るため）。admin-portal 側の定数か、名前の登録時の検査にする。**`portal.users.id` に `sys_` を許さない DB の CHECK は見送り**（確定。id はサーバーが生成するので通常は起きない）。代わりの歯止めは、共通部品の `historyAccess` の `sys_` ガード（`sys_` で始まる id の「ユーザー」は `none`）だけになる |
 | 6 | システム操作は「閲覧のみは書き込み不可」（`authorizeWrite`）の**対象外**。ただし履歴は**必ず残す** | ユーザーのセッションではなく、**秘密のキーで認証する別経路**だから。`authorizeWrite` を通らない書き込み経路が増えるので、**その経路が人のセッションで到達できないこと**（キー以外で通らない、ユーザーのクッキーでは認証されない）を各アプリのテストで確かめる。履歴を残せなかったとき（`action_history` への書き込みの失敗）に、操作自体を失敗にするか続行するかは論点（§8）。**秘密のキーの検証**（タイミング攻撃に強い比較・キーの再発行・ローテーション）は、この設計書の範囲外（別の設計。共通部品に `authorizeSystem` のような関数を足すかは、MakeShop 連携の設計のときに） |
 
 - 範囲の判定（`historyScope`）には影響しない。システム操作の行は、`all`（管理者）にだけ出る。スタッフの `own` の問い合わせは `actor_id = <自分の id>` なので、
@@ -517,18 +517,19 @@ export function historyAccess(
 | E | price-app の**入荷の履歴**（11/19 以降） | price-app |
 
 - A は B・C より前に済んでいればよい（B は v3.20 で足りるので、A と B は並行できる）。C の前に A が必要
-- **v3.21 の中身（追加のみ）** — 確定したものと、実装前に確認したいもの:
+- **v3.21 の中身（追加のみ）— すべて確定（2026-10-21、「確認待ち」は解消）**:
 
-| 追加するもの | 状態 |
+| 追加するもの | 根拠 |
 |---|---|
-| `historyScope(role)`（§2-1） | 各アプリの設計で一致（確定扱い） |
-| `historyViewLock`・`effectiveHistoryView`・`canViewHistory`・`historyAccess(user, granted)`（§4-4） | 確定（案 B、管理者◯固定・閲覧のみ✕固定） |
-| `isSystemActor`・`SYSTEM_ACTOR_PREFIX`、`historyAccess` の `sys_` ガード（§3-5・§3-6） | **論点 10・11 は確認待ち**（最後の確定の連絡に含まれていない） |
-| `actorDisplay`（`withActorDisplays`・`displayActor`・`loadActorDirectory`・`actorLabel`・`ACTOR_DELETED_SUFFIX`）（§3-7） | 確定（2026-10-21） |
-| `HISTORY_NONE_MESSAGE`・`HISTORY_SCOPE_LABELS`（§2-2） | **論点 7 は確認待ち** |
-| `historyAccess` を判別共用体（`all`/`own`+`actorId`/`none`）で返す形（§2-1） | **論点 1 は確認待ち**（各アプリの希望は `historyScope` のみ。`historyAccess` は私の追加案） |
+| `historyScope(role)`（§2-1） | 各アプリの設計で一致。論点 1 で残すと確定 |
+| `historyAccess(user, granted)` — own のとき `actorId` が必ず付く判別共用体（`all`／`own`+`actorId`／`none`）（§2-1・§4-4） | 論点 1 確定 |
+| `historyViewLock`・`effectiveHistoryView`・`canViewHistory`（§4-4） | 案 B、管理者◯固定・閲覧のみ✕固定（確定） |
+| `isSystemActor`・`SYSTEM_ACTOR_PREFIX`、`historyAccess` の `sys_` ガード（接頭辞だけで `none`、大文字小文字を区別しない）（§3-5・§3-6） | 論点 10・11 確定 |
+| `actorDisplay`（`withActorDisplays`・`displayActor`・`loadActorDirectory`・`actorLabel`・`ACTOR_DELETED_SUFFIX`）（§3-7） | 論点 16〜19 確定 |
+| `HISTORY_NONE_MESSAGE`・`HISTORY_SCOPE_LABELS`（§2-2） | 論点 7 確定 |
 
-- 「確認待ち」の項目は、実装の開始の合図の前に確認する（含めない場合も追加のみなので、あとから別の版で足せる）。実装時の README・CHANGELOG・`package.json` の `version`（3.21.0）・`tests/version.test.ts` は、通常のリリース手順に従う
+- **v3.21 に含まないもの**: `authorizeSystem`（システム用の認証。論点 15）、予約名の一覧（論点 12。ポータル側）、権限表（権限マトリクス）の判定ロジックの共通化（§10。別項目）、`createServiceClient` のキャッシュ設定（v3.22）、「旧: ○○」の併記（論点 19。後回し）
+- **実装の開始の合図は、まだ出ていない**（本番の事前確認 SQL などが残っているため）。合図が出るまで実装しない。実装時の README・CHANGELOG・`package.json` の `version`（3.21.0）・`package-lock.json`・`tests/version.test.ts` は、通常のリリース手順に従う（タグを切るときは `version` も上げる）
 
 ## 7. タグの切り方（確定 2026-10-21）
 
@@ -552,7 +553,7 @@ export function historyAccess(
 
 ## 8. 決める論点（ユーザーへ）
 
-1. **共通部品の形**: `historyScope(role)`（純粋関数）＋ `historyAccess(user)`（own のとき `actorId` を持つ判別共用体）の2本立てでよいか（§2-1）。
+1. **共通部品の形**: **確定**（2026-10-21）= `historyScope(role)`（純粋関数）を残し、`historyAccess` は **own のときに `actorId` が必ず付く判別共用体**で返す（§2-1）
    各アプリの希望は前者のみ。後者は「own なのに id が無い」書き間違いを型で防ぐための追加（不要なら外せる）
 2. **規約**: 列名 `actor_id`・text・外部キーなし・名前はスナップショット・キーは `portal.users.id`、を共通の規約にしてよいか（§3-1）
 3. **SQL**: **確定**（ユーザー判断 2026-10-20）= 実行できる共通の関数は作らず、テンプレートの共有にとどめる（§3-2）。過去の行は、名前が現ユーザーちょうど1人に一致する行だけ `actor_id` を埋め、残りは null のまま（管理者のみ）。`login_id` の照合は不採用（名前のみ）。(B2)（名前と別人のログインIDの衝突の確認）は、埋める前の確認として含める（§3-3）
@@ -562,15 +563,15 @@ export function historyAccess(
 4c. **組み合わせ判定の共通ヘルパー**（案 B 確定により採用前提）: `historyViewLock(role)`・`effectiveHistoryView`/`canViewHistory(role, granted)`・`historyAccess(user, granted)`（`granted` 必須。receipt-app は `true` を明示）を共通部品に置くか（§4-4）。置かない案は、各アプリが自分で「閲覧のみは別途塞ぐ」と書く（書き方がずれて穴になりうる）
 5. **確定**: **price-app の価格改定履歴は別権限 `pricehistory.view` を新設**（ユーザー判断 2026-10-20、δ）。`history.view` は操作履歴だけになり payment-app と揃う。読み取り系で閲覧のみにも設定可、範囲は全件。共通部品への影響なし。price-app 側で、既存の `history.view` 保存値の引き継ぎ（不可のスタッフが新たに見えないように）などを確認する（§4-9）
 6. **price-app の商品詳細の履歴タブ**（全ロールに全履歴を出している）: 制限の対象にするか（§5）。対象にしないと「閲覧のみは見られない」と食い違う
-7. **共通メッセージ**: `HISTORY_NONE_MESSAGE`・`HISTORY_SCOPE_LABELS` を共通部品に持つか（§2-2）
+7. **共通メッセージ**: **確定**（2026-10-21）= `HISTORY_NONE_MESSAGE`・`HISTORY_SCOPE_LABELS` を共通部品に持つ（§2-2）
 8. **タグ**: `historyScope` は v3.21 単独、キャッシュの既定は別のタグ（§7）でよいか
 9. **本番切替**: **確定**（ユーザー判断 2026-10-20）= フラグなしの4段階を全アプリ共通にする（①DB列追加 ②`actor_id` を書くだけのデプロイ ③過去の行を埋める ④絞り込みを有効にするデプロイ。戻しは Instant Rollback）。price-app の `HISTORY_SCOPE_ENABLED` は使わない（§6）。共通部品は、v3.21 を取り込むだけでは挙動が変わらず、④でアプリが呼び始めて初めて効く（§6-1）
-10. **システム用の操作者の規約**（§3-5）: `sys_` の予約・形式（`^sys_[a-z0-9_]{1,32}$`）・null とは別・「(削除済み)」を付けない、でよいか
-11. **`isSystemActor` を共通部品に置くか**（§3-6）: 置く案（接頭辞を1か所に。`historyAccess` は接頭辞だけで none）か、各アプリが `startsWith("sys_")` と書く案か。予約名の一覧は共通部品に持たない
-12. **予約名・予約 id の防止**（§3-5 の 5）: 予約名のユーザーを作れない検査と、`portal.users.id` に `sys_` を許さない DB の CHECK を、admin-portal（別セッション）に依頼するか
-13. **履歴を残せなかったとき**: システム操作の本体は成功し、履歴の書き込みだけ失敗した場合に、操作を失敗にする（履歴なしの操作を許さない）か、続行して警告を残すか。要件は「履歴は必ず残す」。同じトランザクションにできるか、アプリごとの確認が要る
-14. **人が始めた操作とシステムの操作の線引き**: 人が押したボタンがバッチを動かす場合は人の id（システムが肩代わりしたときだけ `sys_…`）でよいか
-15. **システム用の認証経路**（秘密のキー）: この設計書の範囲外。共通部品に `authorizeSystem`（キーの検証・タイミング攻撃に強い比較）を足すかは、MakeShop 連携の設計のときに決める
+10. **システム用の操作者の規約**（§3-5）: **確定**（2026-10-21）= `sys_` の予約・形式（`^sys_[a-z0-9_]{1,32}$`）・null（照合できない旧行）とは別・「(削除済み)」を付けない
+11. **`isSystemActor` を共通部品に置くか**（§3-6）: **確定** = 置く。`isSystemActor`・`SYSTEM_ACTOR_PREFIX`、`historyAccess` の `sys_` ガード（接頭辞だけで `none`）を含める。予約名の一覧は共通部品に持たない
+12. **予約名・予約 id の防止**（§3-5 の 5）: **確定** = 予約名のユーザー作成防止は admin-portal（ポータル）へ依頼する。`portal.users.id` に `sys_` を許さない DB の CHECK は**見送り**
+13. **履歴を残せなかったとき**: **確定** = MakeShop 連携の設計のときに決める（今は決めない）。要件は「履歴は必ず残す」
+14. **人が始めた操作とシステムの操作の線引き**: **確定** = 人が押したボタンが動かす処理は人の id（システムが肩代わりしたときだけ `sys_…`）
+15. **システム用の認証経路**（秘密のキー）: **確定** = この設計書の範囲外。共通部品に `authorizeSystem` を足すかは、MakeShop 連携の設計のときに決める
 16. **操作者の名前の解決を共通部品に入れるか**: **確定**（2026-10-21）= 入れる（§3-7-5）
 17. **置き場所**: **確定** = 新しい `admin-portal-shared/actorDisplay`（`authorize` に混ぜない）
 18. **引けなかったとき**（DB エラー・一覧が空）: **確定** = 記録時の名前で続行し、「(削除済み)」は付けない
