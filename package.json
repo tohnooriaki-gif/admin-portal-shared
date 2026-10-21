@@ -1,6 +1,6 @@
 {
   "name": "admin-portal-shared",
-  "version": "3.20.0",
+  "version": "3.21.0",
   "private": true,
   "license": "UNLICENSED",
   "description": "admin-portal（Multi-Zone shell）配下の各アプリ（price-app / receipt-app / 今後追加分）が共有する処理全般のユーティリティ（認証まわりはその一部）",
@@ -22,7 +22,9 @@
     "./components/FilterResetLink": "./src/components/FilterResetLink.tsx",
     "./portalUsers": "./src/portalUsers.ts",
     "./search": "./src/search.ts",
-    "./authorize": "./src/authorize.ts"
+    "./authorize": "./src/authorize.ts",
+    "./systemActor": "./src/systemActor.ts",
+    "./actorDisplay": "./src/actorDisplay.ts"
   },
   "scripts": {
     "test": "vitest run",

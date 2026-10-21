@@ -359,3 +359,19 @@ v3.18の本番確認で見つかった不具合。payment-appの入金登録の�
 管理セッション経由のユーザー指示「設計を進める」（2026-10-20）。
 
 - **（タグ管理対象外）** `docs/design-history-scope.md`を新設。`authorize`に足す案（`historyScope(role)`・`historyAccess(user)`）、履歴テーブルの共通の規約（`actor_id`・名前のスナップショット・既存行の照合テンプレート）、`history.view`の扱い、履歴の読み取り経路の洗い出し、タグの切り方、ユーザーに決めてもらう論点を整理。payment-app・receipt-appの設計書を踏まえた。コード・DB・タグの変更なし
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 📅 2026-10-21（水）
+
+**概要：操作履歴を権限で制限する共通部品を追加（v3.21、追加のみ）**
+
+管理セッション経由のユーザー指示（設計は`docs/design-history-scope.md`、2026-10-21に実装の開始を指示。着手前にユーザー本人にも確認）。**追加のみ**（既存の関数は変えていない）。**v3.21を取り込んだだけでは、アプリの挙動は何も変わらない**（呼ばれない限り影響しない。環境変数・フラグは持たない）。効き始めるのは、各アプリが読み取り側でこれらを呼ぶ段階（本番切替の④）から。
+
+- **`v3.21`** `authorize`に、操作履歴の範囲を決める純粋な関数を追加（DBを引かない・ブラウザでも呼べる）: `historyScope(role)`（管理者=all／スタッフ=own／閲覧のみ・不明・空・null=none）、`historyAccess(user, granted)`（範囲と各アプリの`history.view`の積。結果は判別共用体で、**ownのときは`actorId`が必ず付く**。idが`sys_`で始まる「ユーザー」は役割にかかわらずnone。`history.view`は範囲を広げられず、止めることだけできる）、`historyViewLock(role)`（`history.view`の欄の固定: 管理者=on・閲覧のみ・不明=off・スタッフ=null。画面とサーバーが同じ関数を見る）、`effectiveHistoryView`／`canViewHistory`（履歴の画面を開けるか）、`HISTORY_NONE_MESSAGE`・`HISTORY_SCOPE_LABELS`（文言をそろえる）、型`HistoryScope`・`HistoryAccess`・`HistoryViewLock`。内部は`Record<PortalRole, …>`で、ロール追加時に型エラーで範囲と固定を決めさせる
+- **`v3.21`** 新モジュール`admin-portal-shared/systemActor`: システム用の操作者idの規約。`SYSTEM_ACTOR_PREFIX`（`sys_`）、`isSystemActor(id)`（形式`^sys_[a-z0-9_]{1,32}$`に合うものだけtrue）、`hasSystemActorPrefix(id)`（形式を問わず大文字小文字を区別せず`sys_`で始まればtrue。ガード・ユーザー作成時の検査用）。nullの`actor_id`（照合できなかった旧い行）とは別
+- **`v3.21`** 新モジュール`admin-portal-shared/actorDisplay`（サーバー専用）: 履歴に出す操作者の名前の解決。`withActorDisplays(client, rows, pick)`（行の配列に`actor`を付ける。一覧は1回だけ引く）、`displayActor`（純粋関数）、`loadActorDirectory`、`actorLabel`、`ACTOR_DELETED_SUFFIX`（「(削除済み)」）。今の名前を出し、削除済みは記録時の名前+「(削除済み)」（`sys_`・旧い行・引けなかったときは付けない）。認可と逆に、DBエラー・一覧が空でも履歴は出す（全行`unknown`）。ユーザー一覧そのものは返さない。「旧: ○○」の併記は後回し
+- **`v3.21`** `package.json`の`exports`に`./systemActor`・`./actorDisplay`を追加。**`version`を`3.21.0`に上げた**（`package-lock.json`も）
+- `tests/historyAccess.test.ts`・`tests/systemActor.test.ts`・`tests/actorDisplay.test.ts`（計50テスト）: 役割×`granted`の全表（管理者は保存値を無視してall、閲覧のみはtrueでもnone、スタッフはtrueだけown）・不明なロールのfail-closed・`sys_`のガード（形式違い・大文字小文字・途中に含むだけのidは通常どおり）・idが空/文字列でない場合・判別共用体の型・実際のsupabase-jsクライアント＋差し替えたfetchで`authorizeActor`の結果と結合（ロール変更・削除の即時反映）・システム用idの形式（長いs「ſ」を含む）・名前の解決（改名・削除・`sys_`・旧い行・DBエラー・通信失敗・一覧が空・問い合わせが1回・ブラウザ側での拒否・想定外の例外の再throw・他のユーザーの情報が結果に出ないこと）。カバレッジ100%を維持（209テスト）
+- **実バンドルの確認**: esbuildで`authorize`＋`systemActor`をブラウザ向けにバンドル（1.9KB）、`actorDisplay`単体（1.1KB）もバンドルし、どちらも`@supabase/supabase-js`・`ws`・WebSocketを含まないことを確認
+- READMEに、これらの使い方・絞り込みを問い合わせに付けるときの約束（noneはDBを読まない／ownは`actor_id`を条件にしてからorder・limit／キーは`portal.users.id`）・履歴テーブルの規約・本番切替の4段階での呼ぶ時期を追記

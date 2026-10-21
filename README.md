@@ -13,7 +13,7 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
 
 `tests/`配下にVitest（price-appと同一）でユニットテストがある。対象は`src/`配下の**純粋なロジック
 のみ**（`session`・`sessionHeaders`・`basePath`・`loginRedirect`・`middlewareMatcher`・`db`・
-`format`・`supabase`・`portalUsers`・`authorize`（差し替えたfetchで）・`search`・`components/ui`の`createUiKit()`が返す文字列・`components/StickyActionBar`・`components/SearchValue`・`components/SearchInput`・`components/FilterResetLink`のクラス組み立て）。UIコンポーネント自体の
+`format`・`supabase`・`portalUsers`・`authorize`（差し替えたfetchで）・`systemActor`・`actorDisplay`・`search`・`components/ui`の`createUiKit()`が返す文字列・`components/StickyActionBar`・`components/SearchValue`・`components/SearchInput`・`components/FilterResetLink`のクラス組み立て）。UIコンポーネント自体の
 レンダリング・見た目のスナップショットは対象外（`UserMenu`の外側クリック等のインタラクションは
 未着手。全体管理セッションのTODO.mdで管理、`TODO.md`参照）。
 
@@ -149,6 +149,61 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
   Vitestは、実際のsupabase-jsクライアント＋差し替えたfetchで、未登録・DBエラー（500・PGRST106・通信失敗）・ロール不明（空・表記違い・
   null）・閲覧のみ・大文字小文字の違うログインID・毎回引くこと・ロール変更の即時反映・想定外の例外の再throw・ブラウザ側での呼び出しの
   拒否を検証（`tests/authorize.test.ts`）。
+- **操作履歴を権限で制限する部品**（v3.21〜、`authorize`・`systemActor`・`actorDisplay`。設計は`docs/design-history-scope.md`）。
+  **追加のみ**（既存の関数は変えていない）。**v3.21を取り込んだだけでは、アプリの挙動は何も変わらない**（呼ばれない限り影響しない）。
+  効き始めるのは、アプリが読み取り側でこれらを呼ぶ段階（本番切替の④。下の「呼ぶ時期」）から。環境変数・フラグは持たない
+  - **管理者=全件／スタッフ=自分の操作だけ／閲覧のみ=見られない**。履歴の操作者は名前ではなく**`portal.users.id`**（`actor_id`列）で管理する
+  - `historyScope(role)`: 役割だけで決まる範囲の上限（`"all"`／`"own"`／`"none"`）。管理者=all、スタッフ=own、閲覧のみ・不明・空・`null`・
+    `undefined`=none（fail-closed）。DBを引かない純粋な関数で、**ブラウザ側（メニューの出し分け）でも呼べる**（`window`の検査は無い）。
+    内部は`Record<PortalRole, …>`なので、ロールを追加すると型エラーで範囲と固定を決めさせる
+  - `historyViewLock(role)`: 各アプリの権限`history.view`（「履歴の画面を開けるか」）の欄の固定。管理者=`"on"`（常に可）、閲覧のみ・不明・空=`"off"`
+    （常に不可）、スタッフ=`null`（設定できる）。**画面（チェックボックスの無効化）とサーバー（実効の判定）が同じ関数を見る**。固定された
+    役割の保存済みの値は**無視**される。各アプリの固定表に`history.view`を直接書かず、これを呼んで反映する
+  - `effectiveHistoryView(role, granted)`／`canViewHistory`（同じ）: 実効の`history.view`。固定があれば固定、無ければ`granted === true`のときだけ可。
+    メニュー・ページの入口の判定に使う。**権限項目の無いアプリ（receipt-app）は`granted`に`true`を明示する**（名前付き定数にして理由をコメントすること。
+    将来、権限マトリクスを導入するときは同時に`history.view`を足す）
+  - `historyAccess(user, granted)`: **データを読む側が使う**。範囲（役割固定）と`history.view`（`granted`。**必須**）の積。結果は判別共用体で、
+    **`own`のときは`actorId`が必ず付く**（`{ scope: "all" }`／`{ scope: "own", actorId }`／`{ scope: "none" }`）。`authorizeActor`の結果の`user`を
+    そのまま渡せる（認可に失敗したときは`null`→none）。`history.view`は範囲を**広げられず、止めることだけできる**。
+    **idが`sys_`で始まる「ユーザー」は役割にかかわらずnone**（人のセッションがシステムの行を名乗れない）。idが空・文字列でなくてもnone
+  - **絞り込みを問い合わせに付ける処理は共通部品に入れていない**（各アプリのクエリが違うため）。次の約束を守る:
+    1. `none`は**DBを読まない**（空、または`HISTORY_NONE_MESSAGE`の案内）
+    2. `own`は`actor_id = access.actorId`を**問い合わせの条件**にしてから`order`・`limit`（画面側で隠さない。他人の行をサーバーから出さない）
+    3. `all`は条件なし（`actor_id`がnullの行も含む）
+    4. キーは**必ず`portal.users.id`**（ログインID・名前では絞らない。ログインIDは再利用されうる。名前は改名で変わる）
+    5. **ブラウザ側で出し分けても、強制は必ずサーバー側**。メニューを消すだけでは見えてしまうので、データを読む関数（Server Component・API）が
+       `historyAccess`を通すこと。履歴を読む画面以外（商品詳細・ダッシュボードなど）も、履歴を出すなら同じ判定を通す
+  - `HISTORY_NONE_MESSAGE`（「閲覧のみの権限では、操作履歴は見られません」）と`HISTORY_SCOPE_LABELS`（全件／自分の操作だけ／見られない）:
+    画面の文言を全アプリでそろえる。`HISTORY_NONE_MESSAGE`は閲覧のみ向けの文言なので、**スタッフが`history.view`を✕にされて見られない場合は、
+    アプリ側で別の案内（例: 権限が無い）を出す**こと
+  - `admin-portal-shared/systemActor`: **システム用の操作者**（人がログインしていない操作: 将来のMakeShop連携のAPI・バッチなど）の規約。
+    `actor_id`が**`sys_`で始まる値を予約**（`SYSTEM_ACTOR_PREFIX`。例: `sys_makeshop`、形式は`^sys_[a-z0-9_]{1,32}$`）。**nullの`actor_id`
+    （照合できなかった旧い行=管理者だけが見える）とは別**で、システム操作はnullにしない。idは**サーバーが決める**（各APIルートのコード内の定数。
+    画面・外部入力から受けない）。`isSystemActor(id)`は形式に合うものだけtrue（表示で「(削除済み)」を付けない判定に）、`hasSystemActorPrefix(id)`は
+    形式を問わず大文字小文字を区別せず`sys_`で始まればtrue（`historyAccess`のガードと、ユーザー作成時の検査用）。予約名の一覧は持たない
+  - `admin-portal-shared/actorDisplay`: **履歴に出す操作者の名前の解決**（サーバー専用）。履歴には**今の名前**を出す（`actor_id`から`portal.users`を
+    引く）。`withActorDisplays(client, rows, pick)`が履歴の行の配列に`actor`（`{ name, status }`）を付けて返す（順序・元の項目は保つ）。
+    `status`は`current`（今の名前）／`deleted`（`portal.users`にいない=記録時の名前。`actorLabel(actor)`が「名前 (削除済み)」にする）／
+    `system`（`sys_…`）／`legacy`（`actor_id`がnull=旧い行）／`unknown`（一覧が引けなかった）。**「(削除済み)」は削除を確認できたときだけ**付く
+    （`system`・`legacy`・`unknown`には付かない）。`displayActor`（純粋関数）・`loadActorDirectory(client)`（一覧を1回だけ引く）・
+    `ACTOR_DELETED_SUFFIX`も使える
+    - 一覧は**行数にかかわらず1回**だけ引く（人のidが無ければ引かない）。毎回引く（キャッシュなし）。**渡すSupabaseクライアントは
+      データキャッシュに載らないもの（`fetch`が`cache: "no-store"`）にすること**（載ると、改名前の名前が出続ける）
+    - **認可とは逆に、失敗しても履歴は出す**: DBエラー・一覧が空のときは全行`unknown`（記録時の名前）で続行する。想定外の例外は再throw。
+      ブラウザ側で呼ばれたら`unknown`に丸めず例外
+    - **ユーザー一覧は返さない**（他のユーザーの名前・ロール・ログインIDはクライアントに渡らない）。検索・絞り込みには解決後の表示名を渡す。
+      名前が空の現ユーザーはログインIDを表示。`actor_id`を持たないテーブル（price-appの価格改定履歴など）には使わない。「旧: ○○」の併記は未対応
+  - **履歴テーブルの規約**（各アプリのテーブルの形は別々のまま、共通にするのは次の考え方）: `actor_id text null`（`portal.users.id`。外部キーなし）＋
+    名前のスナップショット（表示用・記録時の名前）＋索引`(actor_id, date desc)`。書き込みAPIは`authorizeActor`の結果の`user`から`id`と名前を**同じ`user`から**入れる。
+    過去の行は、名前が現ユーザーちょうど1人に一致する行だけ`actor_id`を埋め、残りはnullのまま（管理者だけが見える）。照合SQLのテンプレートは
+    `docs/design-history-scope.md`の§3-3
+  - **呼ぶ時期（本番切替の4段階。フラグなし、戻しはInstant Rollback）**: ①DBに`actor_id`列を足す → ②`actor_id`を**書くだけ**のデプロイ（`authorizeActor`の
+    `user.id`を使う。v3.20で足りる。読み取り側の関数は呼ばない） → ③過去の行を埋める → ④**絞り込みを有効にする**デプロイ（ここで初めて
+    `historyAccess`・`canViewHistory`・`historyViewLock`・`withActorDisplays`を呼ぶ）。**v3.21の取り込みは、④とは別のデプロイで先に**行う
+    （共通部品の更新を単独で出して確かめてから、挙動を変える④を出す）
+  Vitestは、役割×`granted`の全表・`sys_`のガード・`authorizeActor`の結果との結合（ロール変更の即時反映）・システム用idの形式・名前の解決
+  （改名・削除・`sys_`・旧い行・DBエラー・一覧が空・問い合わせが1回・ブラウザ側での拒否・他のユーザーの情報が出ないこと）を検証
+  （`tests/historyAccess.test.ts`・`tests/systemActor.test.ts`・`tests/actorDisplay.test.ts`）。
 - `search`: 検索語・検索対象の正規化と、スペース区切りAND検索のマッチング（v3.17〜）。receipt-appの
   `lib/search.ts`を**挙動を変えずに**移したもの（全アプリの検索のひらがな・カタカナ対応の共通化）。DOM・
   Next.jsに依存しない純粋関数で、サーバー側でもクライアント側でも使える。
@@ -372,7 +427,7 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.20"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.21"
 }
 ```
 
