@@ -375,3 +375,13 @@ v3.18の本番確認で見つかった不具合。payment-appの入金登録の�
 - `tests/historyAccess.test.ts`・`tests/systemActor.test.ts`・`tests/actorDisplay.test.ts`（計50テスト）: 役割×`granted`の全表（管理者は保存値を無視してall、閲覧のみはtrueでもnone、スタッフはtrueだけown）・不明なロールのfail-closed・`sys_`のガード（形式違い・大文字小文字・途中に含むだけのidは通常どおり）・idが空/文字列でない場合・判別共用体の型・実際のsupabase-jsクライアント＋差し替えたfetchで`authorizeActor`の結果と結合（ロール変更・削除の即時反映）・システム用idの形式（長いs「ſ」を含む）・名前の解決（改名・削除・`sys_`・旧い行・DBエラー・通信失敗・一覧が空・問い合わせが1回・ブラウザ側での拒否・想定外の例外の再throw・他のユーザーの情報が結果に出ないこと）。カバレッジ100%を維持（209テスト）
 - **実バンドルの確認**: esbuildで`authorize`＋`systemActor`をブラウザ向けにバンドル（1.9KB）、`actorDisplay`単体（1.1KB）もバンドルし、どちらも`@supabase/supabase-js`・`ws`・WebSocketを含まないことを確認
 - READMEに、これらの使い方・絞り込みを問い合わせに付けるときの約束（noneはDBを読まない／ownは`actor_id`を条件にしてからorder・limit／キーは`portal.users.id`）・履歴テーブルの規約・本番切替の4段階での呼ぶ時期を追記
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 📅 2026-10-23（金）
+
+**概要：3アプリの権限項目（権限表）の全体設計書を追加（設計のみ。コードなし）**
+
+管理セッション経由のユーザー了承（2026-10-23）。
+
+- **（タグ管理対象外）** `docs/design-permission-matrix-all.md`を新設。3アプリ（price・payment・receipt）の項目の対応表、そろえる点・そろえない点（理由つき）、共通部品に置くもの（新モジュール`permissions`の案。`history.view`はv3.21の`historyViewLock`を使う）、移行の順番と影響、ユーザーに確認したい論点（6つ）を整理。各アプリの`docs/permission-inventory.md`は読み取りのみ。コード・DB・タグの変更なし
