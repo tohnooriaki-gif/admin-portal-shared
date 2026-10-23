@@ -385,3 +385,12 @@ v3.18の本番確認で見つかった不具合。payment-appの入金登録の�
 管理セッション経由のユーザー了承（2026-10-23）。
 
 - **（タグ管理対象外）** `docs/design-permission-matrix-all.md`を新設。3アプリ（price・payment・receipt）の項目の対応表、そろえる点・そろえない点（理由つき）、共通部品に置くもの（新モジュール`permissions`の案。`history.view`はv3.21の`historyViewLock`を使う）、移行の順番と影響、ユーザーに確認したい論点（6つ）を整理。各アプリの`docs/permission-inventory.md`は読み取りのみ。コード・DB・タグの変更なし
+
+管理セッション経由のユーザー指示（設計は`docs/design-permission-matrix-all.md`で確定、2026-10-23に実装の開始を指示。着手前にユーザー本人にも確認）。**追加のみ**（`authorize.ts`などの既存の関数は変えていない）。**取り込んだだけでは、アプリの挙動は何も変わらない**。`createServiceClient`のキャッシュ設定は含めない（v3.23以降）。
+
+- **`v3.22`** 新モジュール`admin-portal-shared/permissions`: 項目の型`PermissionDef`（`key`＝`<対象>.<動作>`・`label`・`description`・`kind`＝write/read・`defaults`・`lock`）、`definePermissions`（起動時の検証: 命名規則・動作の語彙`PERMISSION_ACTIONS`・key重複・表示名の空・既定値の欠け）、`COMMON_PERMISSIONS`（共通3項目`history.view`・`permissions.manage`・`data.export`）、`permissionLock`（欄の固定。**`history.view`は`historyViewLock`に委譲**、書き込み系の閲覧のみは`canWrite`に委譲）、`normalizeMatrix`・`matrixFromRows`（未知は捨てる・**行が欠けた項目は既定値**・固定は保存値を無視・冪等）、`effectivePermissions`・`can`（未知・空・nullのロールは全項目不可）、`diffMatrix`、`PERMISSION_FAILURES`・`permissionFailureBody`（403「この操作を行う権限がありません…」／503「権限設定を読み込めませんでした…」。`code`は`forbidden`／`unavailable`）
+- **`v3.22`** サーバー専用の`loadRoleMatrix(client, schema, defs)`・`saveRoleMatrix(client, schema, defs, matrix, updatedBy)`・`PermissionsUnavailableError`: `<schema>.role_permissions`を1回で読む（毎回引く・リトライなし）。**表が空・行が欠けた項目だけ既定値**、**表が無い（`42P01`・`PGRST205`）・DBエラー・通信失敗は例外（503にする=fail-closed）**。保存は全役割×全項目を`upsert`（`updated_at`・`updated_by`）。ブラウザ側で呼ばれたら（503の例外ではない）別の例外
+- **`v3.22`** `package.json`の`exports`に`./permissions`を追加。**`version`を`3.22.0`に上げた**（`package-lock.json`も）
+- `tests/permissions.test.ts`・`tests/permissionsStore.test.ts`（計49テスト）: `definePermissions`の検証／固定の全表（`history.view`が`historyViewLock`と一致、`def.lock`、書き込み不可が優先、未知のロールは全項目off）／正規化（保存なし・欠け・未知・真偽値でない値・固定の上書き・プロトタイプのキー・冪等）／`can`・`effectivePermissions`（`history.view`が`effectiveHistoryView`と全ロール×保存値で一致）／`diffMatrix`／失敗時の文言／実際のsupabase-jsクライアント＋差し替えたfetchで読み書き（問い合わせ1回・スキーマ指定・毎回引く・upsertの中身・表が無い／DBエラー／通信失敗／ブラウザ側／不正なスキーマ名）。カバレッジ100%を維持（258テスト）
+- **実バンドルの確認**: esbuildで`permissions`の純粋な部分をブラウザ向けにバンドル（6.3KB）し、`@supabase/supabase-js`・`ws`・WebSocketを含まないことを確認
+- READMEに、`permissions`の使い方・置くもの／置かないもの・`role_permissions`の表の形を追記

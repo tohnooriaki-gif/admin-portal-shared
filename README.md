@@ -13,7 +13,7 @@ Next.js の `transpilePackages` でトランスパイルしてもらう方式（
 
 `tests/`配下にVitest（price-appと同一）でユニットテストがある。対象は`src/`配下の**純粋なロジック
 のみ**（`session`・`sessionHeaders`・`basePath`・`loginRedirect`・`middlewareMatcher`・`db`・
-`format`・`supabase`・`portalUsers`・`authorize`（差し替えたfetchで）・`systemActor`・`actorDisplay`・`search`・`components/ui`の`createUiKit()`が返す文字列・`components/StickyActionBar`・`components/SearchValue`・`components/SearchInput`・`components/FilterResetLink`のクラス組み立て）。UIコンポーネント自体の
+`format`・`supabase`・`portalUsers`・`authorize`（差し替えたfetchで）・`systemActor`・`actorDisplay`・`permissions`（差し替えたfetchで）・`search`・`components/ui`の`createUiKit()`が返す文字列・`components/StickyActionBar`・`components/SearchValue`・`components/SearchInput`・`components/FilterResetLink`のクラス組み立て）。UIコンポーネント自体の
 レンダリング・見た目のスナップショットは対象外（`UserMenu`の外側クリック等のインタラクションは
 未着手。全体管理セッションのTODO.mdで管理、`TODO.md`参照）。
 
@@ -204,6 +204,37 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
   Vitestは、役割×`granted`の全表・`sys_`のガード・`authorizeActor`の結果との結合（ロール変更の即時反映）・システム用idの形式・名前の解決
   （改名・削除・`sys_`・旧い行・DBエラー・一覧が空・問い合わせが1回・ブラウザ側での拒否・他のユーザーの情報が出ないこと）を検証
   （`tests/historyAccess.test.ts`・`tests/systemActor.test.ts`・`tests/actorDisplay.test.ts`）。
+- `permissions`: **3アプリ（price・payment・receipt）共通の権限項目（権限表）の部品**（v3.22〜、設計は`docs/design-permission-matrix-all.md`）。
+  **追加のみ**（既存の関数は変えていない）。**取り込んだだけでは、アプリの挙動は何も変わらない**。前半（型・定義・判定）はDB・Next.jsに依存しない
+  純粋な関数で**ブラウザでも呼べる**。`loadRoleMatrix`・`saveRoleMatrix`は**サーバー専用**（ブラウザ側で呼ばれたら例外）。すべて全拒否（fail-closed）
+  - **置くもの**: 項目の型`PermissionDef`・共通3項目`COMMON_PERMISSIONS`・固定の判定・正規化と判定・失敗時の文言・`role_permissions`の読み書き。
+    **置かないもの**: アプリ固有の項目の定義（各アプリが`definePermissions`に並べる）、設定画面（UI）、変更の記録（操作履歴への書き込み）、どのAPIがどの項目を要求するか
+  - `PermissionDef`: `key`（`<対象>.<動作>`）・`label`・`description`・`kind`（`"write"`＝閲覧のみには付けられない／`"read"`）・`defaults`（管理者／スタッフ／閲覧のみ）・
+    `lock`（追加の固定）。`definePermissions([...])`が**起動時に検証**する（key重複・命名規則・動作の語彙`PERMISSION_ACTIONS`＝edit／delete／import／export／bulk／revert／view／manage・
+    表示名の空・既定値の欠け→例外）
+  - `COMMON_PERMISSIONS`（`historyView`・`permissionsManage`・`dataExport`）: 3アプリで同じkey・意味の共通の項目。各アプリが自分の一覧に取り込む。
+    `data.export`は機能のあるアプリが同じkeyで足す
+  - `permissionLock(def, role)`: 欄の固定（`"on"`＝常に可／`"off"`＝常に不可／`null`＝設定できる）。**画面（チェックボックスの無効化）とサーバー（実効の判定）が同じ関数**を見る。
+    順序: 未知・空のロール→off／**`history.view`は`historyViewLock`に委譲**（二重に定義しない）／書き込み系の閲覧のみ→off（`canWrite`に委譲）／`def.lock`
+  - `normalizeMatrix(defs, raw)`: 全役割×全項目を埋めた表にする。未知のキー・ロールは捨てる、真偽値でない値・**行が欠けた項目は既定値**、**固定の欄は保存値を無視**。冪等。
+    `matrixFromRows(rows)`で`role_permissions`の行を`raw`にできる
+  - `effectivePermissions(defs, matrix, role)`・`can(defs, matrix, role, key)`: 実効権限。**未知・空・nullのロールは全項目不可**。未知のkeyも不可。
+    **`history.view`の実効は`effectiveHistoryView`と全表で一致**する（テストで保証）
+  - `diffMatrix(defs, before, after)`: 変更されたセルの一覧（役割→項目の順、表示名つき）。操作履歴の`changes`・`detail`の材料（書き込みは各アプリ）
+  - `PERMISSION_FAILURES`（`forbidden`＝403「この操作を行う権限がありません。管理者にお問い合わせください。」／`unavailable`＝503「権限設定を読み込めませんでした…」）・`permissionFailureBody(reason)`
+    （`{ error, code }`）: 文言は1か所
+  - `loadRoleMatrix(client, schema, defs)`: `<schema>.role_permissions`を**1回**で読む。毎回引く（キャッシュなし）・リトライなし。
+    **表が空・行が欠けた項目だけ既定値で補う。表が無い（`42P01`・`PGRST205`）・DBエラー・通信失敗は`PermissionsUnavailableError`**（既定値にしない。呼び出し側は503）。
+    渡すクライアントは**`fetch`が`cache: "no-store"`のもの**にすること
+  - `saveRoleMatrix(client, schema, defs, matrix, updatedBy)`: 正規化（固定を固定どおりに直す）して**全役割×全項目を`upsert`**（`updated_at`・`updated_by`を入れる）。
+    保存した表を返す。書き込みの認可（`authorizeWrite`と`permissions.manage`の検査）は呼び出し側。表に`updated_at`・`updated_by`の列が必要（price-appは先に足す）
+  - **使い方（案）**: API→`authorizeWrite`のあとに`can(DEFS, await loadRoleMatrix(...), auth.user.role, "xxx.edit")`を重ねる。`PermissionsUnavailableError`は
+    `PERMISSION_FAILURES.unavailable`（503）にする。画面には`effectivePermissions`を渡す（UIの出し分け専用。実際の制限は各API・ページがサーバーで行う）
+  - **`role_permissions`の表の形**（3アプリ共通）: `role text`・`permission text`・`allowed boolean`・`updated_at timestamptz`・`updated_by text`、主キー`(role, permission)`、RLS有効（service_roleのみ）
+  - ロールを追加するとき、DBのCHECK・`PORTAL_ROLES`に加えて、各項目の`defaults`（`Record<PortalRole, boolean>`）が**型エラーで漏れを防ぐ**
+  Vitestは、`definePermissions`の検証・固定の全表・正規化（欠け・未知・真偽値でない値・固定の上書き・プロトタイプのキー・冪等）・`can`/`effectivePermissions`（未知のロールは全拒否）・
+  `history.view`が`effectiveHistoryView`と一致すること・差分・失敗時の文言と、実際のsupabase-jsクライアント＋差し替えたfetchで読み書き（問い合わせが1回・スキーマの指定・upsertの中身・
+  表が無い／DBエラー／通信失敗が例外・ブラウザ側での拒否）を検証（`tests/permissions.test.ts`・`tests/permissionsStore.test.ts`）。
 - `search`: 検索語・検索対象の正規化と、スペース区切りAND検索のマッチング（v3.17〜）。receipt-appの
   `lib/search.ts`を**挙動を変えずに**移したもの（全アプリの検索のひらがな・カタカナ対応の共通化）。DOM・
   Next.jsに依存しない純粋関数で、サーバー側でもクライアント側でも使える。
@@ -427,7 +458,7 @@ Node 22.23.2の環境では`--legacy-peer-deps`無しだと`Cannot read properti
 `package.json`:
 ```json
 "dependencies": {
-  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.21"
+  "admin-portal-shared": "git+https://github.com/tohnooriaki-gif/admin-portal-shared.git#v3.22"
 }
 ```
 
